@@ -1,67 +1,50 @@
-import { StyleSheet, View, Text, ActivityIndicator, TouchableOpacity } from 'react-native';
 import React, { useEffect, useState } from "react";
-import { useRouter } from 'expo-router'; // Import Expo Router navigation
+import { View, Text, ActivityIndicator, StyleSheet } from "react-native";
 
 const HomeScreen = () => {
-  const router = useRouter(); // Use router for navigation
-
   const [stressData, setStressData] = useState<{ max_stress: number; avg_stress: number } | null>(null);
   const [recommendedTraining, setRecommendedTraining] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  
   useEffect(() => {
-    fetchStressData();
+    // Hardcoding the stress data
+    const testStressData = {
+      max_stress: 85,  // Hardcoded max stress
+      avg_stress: 60,  // Hardcoded average stress
+    };
+
+    // Simulate a fetch delay
+    setTimeout(() => {
+      setStressData(testStressData);
+      setRecommendedTraining(suggestTraining(testStressData.max_stress, testStressData.avg_stress));
+      setLoading(false);
+    }, 1000); // Simulate loading time
   }, []);
 
-  // API-Aufruf zum Abrufen der Stressdaten
-  const fetchStressData = async () => {
-    try {
-      const response = await fetch("http://172.18.31.35:5000/stress", {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: 'your_garmin_email',
-          password: 'your_garmin_password'
-        })
-      });
-  
-      const data = await response.json();
-  
-      setStressData(data);
-      setRecommendedTraining(suggestTraining(data.max_stress, data.avg_stress));
-    } catch (error) {
-      console.error("Fehler beim Abrufen der Stressdaten:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
   const suggestTraining = (maxStress: number, avgStress: number): string => {
     if (maxStress > 80 || avgStress > 50) {
       return "Meditation (10 min)";
     } else if (maxStress > 50 || avgStress > 30) {
-      return "Meditation (15 min)";
+      return "Yoga (15 min)";
     } else if (maxStress > 30 || avgStress > 10) {
-      return "Meditation (20 min)";
+      return "Spaziergang (20 min)";
     } else {
-      return "Meditation (30 min)";
+      return "Intensives Training (30 min)";
     }
   };
 
   const getPanelColor = (training: string): string => {
     switch (training) {
       case "Meditation (10 min)":
-        return "#4CAF50";
-      case "Meditation (15 min)":
-        return "#2196F3";
-      case "Meditation (20 min)":
-        return "#FF9800";
-      case "Meditation (30 min)":
-        return "#F44336";
+        return "#4CAF50"; // Green for Meditation
+      case "Yoga (15 min)":
+        return "#2196F3"; // Blue for Yoga
+      case "Spaziergang (20 min)":
+        return "#FF9800"; // Orange for Walk
+      case "Intensives Training (30 min)":
+        return "#F44336"; // Red for Intense Training
       default:
-        return "#f2f2f2";
+        return "#f2f2f2"; // Default background color
     }
   };
 
@@ -79,16 +62,14 @@ const HomeScreen = () => {
         <Text style={styles.error}>Keine Stressdaten verfügbar.</Text>
       )}
 
+      {/* Empfohlenes Training Header */}
       <Text style={styles.header}>Empfohlenes Training</Text>
 
+      {/* Training Panel */}
       {recommendedTraining && (
-        <TouchableOpacity
-          style={[styles.panel, { backgroundColor: getPanelColor(recommendedTraining) }]}
-          onPress={() => router.push("/")} // Navigate to index Tab
-        >
+        <View style={[styles.panel, { backgroundColor: getPanelColor(recommendedTraining) }]}>
           <Text style={styles.recommendation}>{recommendedTraining}</Text>
-          <Text style={styles.subText}>(Tippe, um das Training zu starten)</Text>
-        </TouchableOpacity>
+        </View>
       )}
     </View>
   );
@@ -108,9 +89,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 5,
     marginTop: 20,
-    alignItems: "center",
   },
-  subText: { fontSize: 14, color: "white", marginTop: 5 },
   error: { fontSize: 16, color: "red" },
 });
 
