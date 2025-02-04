@@ -1,35 +1,37 @@
-import { StyleSheet, View, Text, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { StyleSheet, View, Text, ActivityIndicator, TouchableOpacity } from "react-native";
 import React, { useEffect, useState } from "react";
-import { useRouter } from 'expo-router'; // Import Expo Router navigation
+import * as SecureStore from "expo-secure-store";
+import { useRouter } from "expo-router";
 
 const HomeScreen = () => {
-  const router = useRouter(); // Use router for navigation
-
+  const router = useRouter();
   const [stressData, setStressData] = useState<{ max_stress: number; avg_stress: number } | null>(null);
   const [recommendedTraining, setRecommendedTraining] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  
   useEffect(() => {
     fetchStressData();
   }, []);
 
-  // API-Aufruf zum Abrufen der Stressdaten
   const fetchStressData = async () => {
+    setLoading(true);
+
+    const email = await SecureStore.getItemAsync("garmin_email");
+    const password = await SecureStore.getItemAsync("garmin_password");
+
+    if (!email || !password) {
+      setLoading(false);
+      return;
+    }
+
     try {
       const response = await fetch("http://172.18.31.35:5000/stress", {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: 'your_garmin_email',
-          password: 'your_garmin_password'
-        })
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
       });
-  
+
       const data = await response.json();
-  
       setStressData(data);
       setRecommendedTraining(suggestTraining(data.max_stress, data.avg_stress));
     } catch (error) {
@@ -38,31 +40,12 @@ const HomeScreen = () => {
       setLoading(false);
     }
   };
-  const suggestTraining = (maxStress: number, avgStress: number): string => {
-    if (maxStress > 80 || avgStress > 50) {
-      return "Meditation (10 min)";
-    } else if (maxStress > 50 || avgStress > 30) {
-      return "Meditation (15 min)";
-    } else if (maxStress > 30 || avgStress > 10) {
-      return "Meditation (20 min)";
-    } else {
-      return "Meditation (30 min)";
-    }
-  };
 
-  const getPanelColor = (training: string): string => {
-    switch (training) {
-      case "Meditation (10 min)":
-        return "#4CAF50";
-      case "Meditation (15 min)":
-        return "#2196F3";
-      case "Meditation (20 min)":
-        return "#FF9800";
-      case "Meditation (30 min)":
-        return "#F44336";
-      default:
-        return "#f2f2f2";
-    }
+  const suggestTraining = (maxStress: number, avgStress: number): string => {
+    if (maxStress > 80 || avgStress > 50) return "Meditation (10 min)";
+    if (maxStress > 50 || avgStress > 30) return "Meditation (15 min)";
+    if (maxStress > 30 || avgStress > 10) return "Meditation (20 min)";
+    return "Meditation (30 min)";
   };
 
   return (
@@ -82,10 +65,7 @@ const HomeScreen = () => {
       <Text style={styles.header}>Empfohlenes Training</Text>
 
       {recommendedTraining && (
-        <TouchableOpacity
-          style={[styles.panel, { backgroundColor: getPanelColor(recommendedTraining) }]}
-          onPress={() => router.push("/")} // Navigate to index Tab
-        >
+        <TouchableOpacity style={styles.panel} onPress={() => router.push("/")}>
           <Text style={styles.recommendation}>{recommendedTraining}</Text>
           <Text style={styles.subText}>(Tippe, um das Training zu starten)</Text>
         </TouchableOpacity>
@@ -100,16 +80,7 @@ const styles = StyleSheet.create({
   header: { fontSize: 20, fontWeight: "bold", marginTop: 30 },
   data: { fontSize: 18, marginBottom: 5 },
   recommendation: { fontSize: 20, fontWeight: "bold", color: "white", textAlign: "center" },
-  panel: {
-    width: "100%",
-    padding: 20,
-    borderRadius: 10,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
-    marginTop: 20,
-    alignItems: "center",
-  },
+  panel: { backgroundColor: "#4CAF50", padding: 20, borderRadius: 10, marginTop: 20, alignItems: "center" },
   subText: { fontSize: 14, color: "white", marginTop: 5 },
   error: { fontSize: 16, color: "red" },
 });
