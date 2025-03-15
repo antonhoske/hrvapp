@@ -1,24 +1,22 @@
 import { Tabs } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { Platform, Alert, Button, View } from "react-native";
+import { Platform, Button, View, SafeAreaView } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import LoginModal from "@/components/LoginModal";
 
 export default function TabLayout() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   useEffect(() => {
     checkLogin();
   }, []);
 
-  useEffect(() => {
-    if (isLoggedIn) {
-      fetchStressData();
-    }
-  }, [isLoggedIn]);
+  const triggerRefresh = () => {
+    setRefreshTrigger((prev) => prev + 1);
+  };
 
-  // Checks if login data is stored
   const checkLogin = async () => {
     const email = await SecureStore.getItemAsync("garmin_email");
     const password = await SecureStore.getItemAsync("garmin_password");
@@ -30,45 +28,6 @@ export default function TabLayout() {
     }
   };
 
-  // Fetches stress data from the API
-  const fetchStressData = async () => {
-    const email = await SecureStore.getItemAsync("garmin_email");
-    const password = await SecureStore.getItemAsync("garmin_password");
-  
-    if (!email || !password) {
-      Alert.alert("Fehler", "Bitte melden Sie sich an.");
-      return;
-    }
-  
-    try {
-      const response = await fetch("http://172.18.31.35:5000/stress", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password }),
-      });
-  
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Unbekannter Fehler");
-      }
-  
-      const data = await response.json();
-      console.log("Stress-Daten:", data);
-      // Handle successful data retrieval
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Daten konnten nicht abgerufen werden.";
-      Alert.alert("Fehler", errorMessage);
-      
-      // Optional: If login fails, trigger logout
-      if (error instanceof Error && error.message.includes("Login failed")) {
-        resetLogin();
-      }
-    }
-  };
-
-  // Deletes saved login credentials and opens the login pop-up
   const resetLogin = async () => {
     await SecureStore.deleteItemAsync("garmin_email");
     await SecureStore.deleteItemAsync("garmin_password");
@@ -84,20 +43,29 @@ export default function TabLayout() {
           tabBarStyle: Platform.select({ ios: { position: "absolute" }, default: {} }),
         }}
       >
-        <Tabs.Screen name="explore" options={{ title: "Explore" }} />
+        <Tabs.Screen
+          name="explore"
+          options={{ title: "Explore" }}
+          initialParams={{ refreshTrigger }}
+        />
         <Tabs.Screen name="index" options={{ title: "Training" }} />
       </Tabs>
 
-      {/* Button to reset login */}
-      <View style={{ position: "absolute", top: 50, right: 20 }}>
-        <Button title="🔑 Login ändern" onPress={resetLogin} />
-      </View>
+      {/* Login Button - Now properly positioned */}
+      {isLoggedIn && (
+        <SafeAreaView style={{ position: "absolute", top: 50, right: 20, zIndex: 100 }}>
+          <Button title="🔑 Login ändern" onPress={resetLogin} />
+        </SafeAreaView>
+      )}
 
-      {/* Login modal */}
+      {/* Login Modal */}
       <LoginModal
         isVisible={showLogin}
         onClose={() => setShowLogin(false)}
-        onLoginSuccess={() => setIsLoggedIn(true)}
+        onLoginSuccess={() => {
+          setIsLoggedIn(true);
+          triggerRefresh();
+        }}
       />
     </>
   );

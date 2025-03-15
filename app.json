@@ -1,42 +1,25 @@
 {
   "expo": {
-    "name": "my-app",
-    "slug": "my-app",
-    "version": "1.0.0",
-    "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
-    "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
-    "ios": {
-      "supportsTablet": true
-    },
-    "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+    "extra": {
+      "eas": {
+        "projectId": "c7f67f65-f1a7-49fd-814e-19167cdfef2f"
       }
     },
-    "web": {
-      "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
+    "ios": {
+      "bundleIdentifier": "com.ananananas.myapp",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSHealthShareUsageDescription": "This app requires access to your health data to track your heart rate variability, sleep, activity, and other health metrics to help monitor your stress levels and overall well-being.",
+        "NSHealthUpdateUsageDescription": "This app requires access to write health data to track your health metrics and provide accurate stress monitoring.",
+        "UIBackgroundModes": ["fetch", "remote-notification"],
+        "NSMotionUsageDescription": "This app requires motion access to track your activity levels."
+      },
+      "entitlements": {
+        "com.apple.developer.healthkit": true,
+        "com.apple.developer.healthkit.access": ["health-records"],
+        "com.apple.developer.healthkit.background-delivery": true
+      }
     },
-    "plugins": [
-      "expo-router",
-      [
-        "expo-splash-screen",
-        {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
-        }
-      ],
-      "expo-secure-store"
-    ],
-    "experiments": {
-      "typedRoutes": true
-    }
+    "owner": "ananananas"
   }
 }
