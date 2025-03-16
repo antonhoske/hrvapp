@@ -119,7 +119,7 @@ interface GarminData {
 }
 
 interface HealthKitResponse {
-  value: number;
+      value: number;
   startDate: string;
   endDate: string;
 }
@@ -127,7 +127,9 @@ interface HealthKitResponse {
 interface SleepSample {
   startDate: string;
   endDate: string;
-  value: 'INBED' | 'ASLEEP' | 'AWAKE';
+  value: 'INBED' | 'ASLEEP' | 'AWAKE' | 'CORE' | 'DEEP' | 'REM';
+  sourceId?: string;
+  sourceName?: string;
 }
 
 const HomeScreen = () => {
@@ -194,18 +196,38 @@ const HomeScreen = () => {
       startTime = sortedSamples[0].startDate;
       endTime = sortedSamples[sortedSamples.length - 1].endDate;
 
-      sleepData.forEach((sample: any) => {
+      sleepData.forEach((sample: SleepSample) => {
         const duration = (new Date(sample.endDate).getTime() - new Date(sample.startDate).getTime()) / 1000;
         
+        // Map Apple Health sleep stages to our categories
         switch (sample.value) {
-          case 'INBED':
+          case 'DEEP':
             deepSleep += duration;
             break;
-          case 'ASLEEP':
+          case 'CORE':
             lightSleep += duration;
+            break;
+          case 'REM':
+            remSleep += duration;
             break;
           case 'AWAKE':
             awake += duration;
+            break;
+          case 'ASLEEP': // For older iOS versions that don't provide detailed stages
+            // In this case, we'll still need to estimate the distribution
+            deepSleep += Math.round(duration * 0.2);
+            lightSleep += Math.round(duration * 0.6);
+            remSleep += Math.round(duration * 0.2);
+            break;
+          case 'INBED':
+            // Only count "in bed" time if it's not overlapping with other sleep stages
+            if (!sleepData.some(other => 
+              other !== sample &&
+              new Date(other.startDate) <= new Date(sample.endDate) &&
+              new Date(other.endDate) >= new Date(sample.startDate)
+            )) {
+              awake += duration;
+            }
             break;
         }
 
@@ -214,7 +236,7 @@ const HomeScreen = () => {
           end_time: sample.endDate,
           phase_type: sample.value,
           duration_seconds: duration,
-          hrv: 0 // Not available per phase in HealthKit
+          source: sample.sourceName || 'Unknown'
         });
       });
 
@@ -233,14 +255,51 @@ const HomeScreen = () => {
     };
   };
 
-  const calculateAverageHRV = (hrvData: HealthValue[]) => {
+  const calculateAverageHRV = (hrvData: HealthValue[], sleepStart: string, sleepEnd: string) => {
     if (hrvData.length === 0) return 0;
+    
+    // If we have sleep times, filter for sleep period
+    if (sleepStart && sleepEnd) {
+      const sleepStartTime = new Date(sleepStart).getTime();
+      const sleepEndTime = new Date(sleepEnd).getTime();
+      
+      // Filter HRV readings that occurred during sleep
+      const sleepHrvData = hrvData.filter(reading => {
+        const readingTime = new Date(reading.startDate).getTime();
+        return readingTime >= sleepStartTime && readingTime <= sleepEndTime;
+      });
+
+      if (sleepHrvData.length > 0) {
+        const sum = sleepHrvData.reduce((acc, curr) => acc + curr.value, 0);
+        return Math.round(sum / sleepHrvData.length);
+      }
+    }
+    
+    // If no sleep data or no readings during sleep, use all readings
     const sum = hrvData.reduce((acc, curr) => acc + curr.value, 0);
     return Math.round(sum / hrvData.length);
   };
 
-  const findHighestHRV = (hrvData: HealthValue[]) => {
+  const findHighestHRV = (hrvData: HealthValue[], sleepStart: string, sleepEnd: string) => {
     if (hrvData.length === 0) return 0;
+    
+    // If we have sleep times, filter for sleep period
+    if (sleepStart && sleepEnd) {
+      const sleepStartTime = new Date(sleepStart).getTime();
+      const sleepEndTime = new Date(sleepEnd).getTime();
+      
+      // Filter HRV readings that occurred during sleep
+      const sleepHrvData = hrvData.filter(reading => {
+        const readingTime = new Date(reading.startDate).getTime();
+        return readingTime >= sleepStartTime && readingTime <= sleepEndTime;
+      });
+
+      if (sleepHrvData.length > 0) {
+        return Math.max(...sleepHrvData.map(d => d.value));
+      }
+    }
+    
+    // If no sleep data or no readings during sleep, use all readings
     return Math.max(...hrvData.map(d => d.value));
   };
 
@@ -274,6 +333,7 @@ const HomeScreen = () => {
   };
 
   const fetchHRVData = async () => {
+    console.log('Starting fetchHRVData, healthKitAvailable:', healthKitAvailable);
     if (!healthKitAvailable) {
       console.log("HealthKit is not available");
       return;
@@ -281,146 +341,329 @@ const HomeScreen = () => {
 
     try {
       const now = new Date();
-      const startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000); // Last 24 hours
+      
+      // Set start date to midnight of yesterday
+      const startDate = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() - 1, // yesterday
+        0, 0, 0, 0
+      );
+      
+      // Set end date to midnight of today
+      const endDate = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() - 1, // yesterday
+        23, 59, 59, 999
+      );
+
+      // For sleep data, we want to look at a wider window to catch the full sleep period
+      // From 6 PM yesterday to 11 AM today
+      const sleepStartDate = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() - 1, // yesterday
+        18, 0, 0, 0 // 6 PM
+      );
+      const sleepEndDate = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(), // today
+        11, 0, 0, 0 // 11 AM
+      );
+      
+      console.log('Time ranges for data fetching:');
+      console.log('Activity data window (yesterday):');
+      console.log('- Start:', startDate.toLocaleString());
+      console.log('- End:', endDate.toLocaleString());
+      console.log('Sleep/HRV data window:');
+      console.log('- Start (6 PM yesterday):', sleepStartDate.toLocaleString());
+      console.log('- End (11 AM today):', sleepEndDate.toLocaleString());
 
       const options = {
         startDate: startDate.toISOString(),
-        endDate: now.toISOString(),
+        endDate: endDate.toISOString(),
         ascending: false,
-        limit: 24,
+        limit: 288, // Increased limit to ensure we get all data points for the day (one reading every 5 minutes)
       };
 
-      // Fetch Activity Data first
-      const [steps, calories, distance, workouts] = await Promise.all([
-        new Promise<any>((resolve, reject) => {
+      const sleepOptions = {
+        startDate: sleepStartDate.toISOString(),
+        endDate: sleepEndDate.toISOString(),
+        ascending: true,
+        limit: 288,
+      };
+
+      console.log('Fetching data with options:', JSON.stringify(options, null, 2));
+      console.log('Fetching sleep data with options:', JSON.stringify(sleepOptions, null, 2));
+
+      // Initialize default values
+      let steps = { value: 0 };
+      let calories = { value: 0 };
+      let distance = { value: 0 };
+      let workouts = { activeMinutes: 0, activities: [] };
+      let vo2Max = { value: 0, date: '', status: 'N/A' };
+
+      // Fetch workouts first to calculate active minutes
+      try {
+        const workoutResults = await new Promise<any[]>((resolve, reject) => {
+          if (typeof AppleHealthKit.getAnchoredWorkouts !== 'function') {
+            resolve([]);
+            return;
+          }
+          AppleHealthKit.getAnchoredWorkouts(
+            {
+              ...options,
+              type: 'Workout'
+            },
+            (err: string | null, results: any) => {
+              if (err) {
+                console.error('Error fetching workouts:', err);
+                resolve([]);
+              } else if (results && Array.isArray(results.data)) {
+                console.log('Workouts fetched:', results.data.length);
+                console.log('Raw workout data:', JSON.stringify(results.data, null, 2));
+                const activities = results.data.map(workout => ({
+                  type: workout.activityName || 'Unknown Activity',
+                  duration_minutes: Math.round((workout.duration || 0) / 60)
+                }));
+
+                const totalActiveMinutes = activities.reduce((total, activity) => 
+                  total + activity.duration_minutes, 0);
+
+                resolve({
+                  activeMinutes: totalActiveMinutes,
+                  activities: activities,
+                  anchor: results.anchor
+                });
+              } else {
+                resolve({ activeMinutes: 0, activities: [], anchor: null });
+              }
+            }
+          );
+        });
+        workouts = workoutResults;
+      } catch (error) {
+        console.error('Error fetching workouts:', error);
+      }
+
+      // Safely fetch each metric with error handling
+      try {
+        const stepsResult = await new Promise<any>((resolve, reject) => {
+          if (typeof AppleHealthKit.getDailyStepCountSamples !== 'function') {
+            resolve({ value: 0 });
+            return;
+          }
           AppleHealthKit.getDailyStepCountSamples(
             {
               ...options,
               includeManuallyAdded: true,
             },
-            (err: string | null, results: any) => {
-              if (err) reject(new Error(err));
-              else {
-                // Sum up all steps for today
-                const totalSteps = results.reduce((sum: number, item: any) => sum + item.value, 0);
+            (err: string | null, results: any[]) => {
+              if (err) {
+                console.error('Error fetching steps:', err);
+                resolve({ value: 0 });
+              } else if (Array.isArray(results)) {
+                console.log('Steps data fetched:', results.length, 'samples');
+                console.log('Raw steps data:', JSON.stringify(results, null, 2));
+                const totalSteps = results.reduce((sum: number, item: any) => sum + (item.value || 0), 0);
                 resolve({ value: totalSteps });
+              } else {
+                resolve({ value: 0 });
               }
             }
           );
-        }),
-        new Promise<any>((resolve, reject) => {
+        });
+        steps = stepsResult;
+      } catch (error) {
+        console.error('Error fetching steps:', error);
+      }
+
+      try {
+        const caloriesResult = await new Promise<any>((resolve, reject) => {
+          if (typeof AppleHealthKit.getActiveEnergyBurned !== 'function') {
+            resolve({ value: 0 });
+            return;
+          }
           AppleHealthKit.getActiveEnergyBurned(
             {
               ...options,
               includeManuallyAdded: true,
             },
-            (err: string | null, results: any) => {
-              if (err) reject(new Error(err));
-              else {
-                // Sum up all calories burned today
-                const totalCalories = results.reduce((sum: number, item: any) => sum + item.value, 0);
+            (err: string | null, results: any[]) => {
+              if (err) {
+                console.error('Error fetching calories:', err);
+                resolve({ value: 0 });
+              } else if (Array.isArray(results)) {
+                const totalCalories = results.reduce((sum: number, item: any) => sum + (item.value || 0), 0);
                 resolve({ value: totalCalories });
+              } else {
+                resolve({ value: 0 });
               }
             }
           );
-        }),
-        new Promise<any>((resolve, reject) => {
+        });
+        calories = caloriesResult;
+      } catch (error) {
+        console.error('Error fetching calories:', error);
+      }
+
+      try {
+        const distanceResult = await new Promise<any>((resolve, reject) => {
+          if (typeof AppleHealthKit.getDistanceWalkingRunning !== 'function') {
+            resolve({ value: 0 });
+            return;
+          }
           AppleHealthKit.getDistanceWalkingRunning(
             {
               ...options,
               includeManuallyAdded: true,
             },
-            (err: string | null, results: any) => {
-              if (err) reject(new Error(err));
-              else {
-                // Sum up all distance covered today
-                const totalDistance = results.reduce((sum: number, item: any) => sum + item.value, 0);
+            (err: string | null, results: any[]) => {
+              if (err) {
+                console.error('Error fetching distance:', err);
+                resolve({ value: 0 });
+              } else if (Array.isArray(results)) {
+                const totalDistance = results.reduce((sum: number, item: any) => sum + (item.value || 0), 0);
                 resolve({ value: totalDistance });
+              } else {
+                resolve({ value: 0 });
               }
             }
           );
-        }),
-        new Promise<any>((resolve, reject) => {
-          AppleHealthKit.getWorkouts(
+        });
+        distance = distanceResult;
+      } catch (error) {
+        console.error('Error fetching distance:', error);
+      }
+
+      // Fetch HRV Data with proper error handling
+      let hrvData: HealthValue[] = [];
+      try {
+        hrvData = await new Promise<HealthValue[]>((resolve, reject) => {
+          AppleHealthKit.getHeartRateVariabilitySamples(
             {
-              ...options,
-              ascending: true,
+              ...sleepOptions,
+              unit: 'ms',
+            },
+            (err: string | null, results: HealthValue[]) => {
+              if (err) {
+                console.error('Error fetching HRV:', err);
+                resolve([]);
+              } else if (Array.isArray(results)) {
+                console.log('HRV samples fetched:', results.length);
+                if (results.length > 0) {
+                  console.log('HRV time range:', results[0].startDate, 'to', results[results.length - 1].endDate);
+                  console.log('HRV values range:', Math.min(...results.map(r => r.value)), 'to', Math.max(...results.map(r => r.value)));
+                }
+                console.log('Raw HRV data:', JSON.stringify(results, null, 2));
+                resolve(results.map(result => ({
+                  ...result,
+                  value: result.value * 1000
+                })));
+              } else {
+                resolve([]);
+              }
+            }
+          );
+        });
+      } catch (error) {
+        console.error('Error fetching HRV:', error);
+      }
+
+      // Fetch Sleep Data with proper error handling
+      let sleepData: any[] = [];
+      try {
+        sleepData = await new Promise<any[]>((resolve, reject) => {
+          if (typeof AppleHealthKit.getSleepSamples !== 'function') {
+            resolve([]);
+            return;
+          }
+          AppleHealthKit.getSleepSamples(
+            {
+              ...sleepOptions,
+              type: 'SleepAnalysis',
+              includeStages: true
             },
             (err: string | null, results: any[]) => {
-              if (err) reject(new Error(err));
-              else {
-                // Calculate total active minutes from workouts
-                const workoutMinutes = results.reduce((total, workout) => {
-                  return total + (workout.duration || 0) / 60; // Convert seconds to minutes
-                }, 0);
-                
-                const activities = results.map(workout => ({
-                  type: workout.activityName || 'Unknown Activity',
-                  duration_minutes: Math.round((workout.duration || 0) / 60)
-                }));
-
-                resolve({
-                  activeMinutes: Math.round(workoutMinutes),
-                  activities: activities
-                });
+              if (err) {
+                console.error('Error fetching sleep:', err);
+                resolve([]);
+              } else if (Array.isArray(results)) {
+                console.log('Sleep samples fetched:', results.length);
+                console.log('Sleep time range:', results[0]?.startDate, 'to', results[results.length - 1]?.endDate);
+                console.log('Raw sleep data:', JSON.stringify(results, null, 2));
+                resolve(results);
+              } else {
+                resolve([]);
               }
             }
           );
-        }),
-      ]);
-
-      // Fetch HRV Data
-      const hrvData = await new Promise<HealthValue[]>((resolve, reject) => {
-        AppleHealthKit.getHeartRateVariabilitySamples(
-          {
-            ...options,
-            unit: 'ms', // Explicitly request milliseconds
-          },
-          (err: string | null, results: HealthValue[]) => {
-            if (err) {
-              reject(new Error(err));
-              return;
-            }
-            // Convert values to milliseconds if they're not already
-            const processedResults = results.map(result => ({
-              ...result,
-              value: result.value * 1000 // Convert to milliseconds if in seconds
-            }));
-            resolve(processedResults);
-          }
-        );
-      });
-
-      // Fetch Sleep Data
-      const sleepData = await new Promise<any[]>((resolve, reject) => {
-        AppleHealthKit.getSleepSamples(
-          options,
-          (err: string | null, results: any[]) => {
-            if (err) {
-              reject(new Error(err));
-              return;
-            }
-            resolve(results);
-          }
-        );
-      });
+        });
+      } catch (error) {
+        console.error('Error fetching sleep:', error);
+      }
 
       // Process Sleep Data
       const sleepSummary = processSleepData(sleepData);
 
-      // Calculate HRV Summary
+      // Calculate HRV Summary using sleep times
       const hrvSummary = {
-        lastNightAvg: calculateAverageHRV(hrvData),
-        lastNight5MinHigh: findHighestHRV(hrvData),
-        readings: hrvData.map(reading => ({
-          time: reading.startDate,
-          value: Math.round(reading.value) // Round to whole number
-        }))
+        lastNightAvg: calculateAverageHRV(hrvData, sleepSummary.startTime, sleepSummary.endTime),
+        lastNight5MinHigh: findHighestHRV(hrvData, sleepSummary.startTime, sleepSummary.endTime),
+        readings: hrvData
+          .filter(reading => {
+            if (!sleepSummary.startTime || !sleepSummary.endTime) return true;
+            const readingTime = new Date(reading.startDate).getTime();
+            const sleepStartTime = new Date(sleepSummary.startTime).getTime();
+            const sleepEndTime = new Date(sleepSummary.endTime).getTime();
+            return readingTime >= sleepStartTime && readingTime <= sleepEndTime;
+          })
+          .map(reading => ({
+            time: reading.startDate,
+            value: Math.round(reading.value)
+          }))
       };
+
+      // Fetch VO2 Max
+      try {
+        const vo2MaxResults = await new Promise<any>((resolve, reject) => {
+          if (typeof AppleHealthKit.getVo2MaxSamples !== 'function') {
+            resolve({ value: 0, date: '', status: 'N/A' });
+            return;
+          }
+          AppleHealthKit.getVo2MaxSamples(
+            {
+              unit: 'mL/(kg*min)',
+              ascending: false,
+              limit: 1
+            },
+            (err: string | null, results: any[]) => {
+              if (err) {
+                console.error('Error fetching VO2 Max:', err);
+                resolve({ value: 0, date: '', status: 'N/A' });
+              } else if (Array.isArray(results) && results.length > 0) {
+                const latest = results[0];
+                resolve({
+                  value: parseFloat(latest.value),
+                  date: latest.startDate,
+                  status: latest.value > 0 ? 'Available' : 'N/A'
+                });
+              } else {
+                resolve({ value: 0, date: '', status: 'N/A' });
+              }
+            }
+          );
+        });
+        vo2Max = vo2MaxResults;
+      } catch (error) {
+        console.error('Error fetching VO2 Max:', error);
+      }
 
       // Update state with all the data
       setGarminData({
-        stress: null, // Apple Health doesn't provide stress data
+        stress: null,
         hrv: {
           summary: {
             lastNightAvg: hrvSummary.lastNightAvg,
@@ -439,10 +682,10 @@ const HomeScreen = () => {
             awake_seconds: sleepSummary.awake,
             sleep_start: sleepSummary.startTime,
             sleep_end: sleepSummary.endTime,
-            sleep_score: 'N/A', // Apple Health doesn't provide sleep score
+            sleep_score: 'N/A',
             average_hrv: hrvSummary.lastNightAvg,
-            lowest_hrv: Math.min(...hrvData.map(d => d.value)),
-            highest_hrv: Math.max(...hrvData.map(d => d.value))
+            lowest_hrv: Math.min(...(hrvData.length ? hrvData.map(d => d.value) : [0])),
+            highest_hrv: Math.max(...(hrvData.length ? hrvData.map(d => d.value) : [0]))
           },
           phases: sleepSummary.phases
         },
@@ -450,13 +693,13 @@ const HomeScreen = () => {
           steps: steps.value || 0,
           calories_burned: Math.round(calories.value) || 0,
           active_minutes: workouts.activeMinutes || 0,
-          distance_km: (distance.value || 0) / 1000, // Convert meters to kilometers
-          floors_climbed: 0, // Not available in HealthKit
+          distance_km: (distance.value || 0) / 1000,
+          floors_climbed: 0,
           active_time_seconds: (workouts.activeMinutes || 0) * 60,
           date: now.toISOString().split('T')[0],
-          vo2_max: 0, // We'll update this separately
-          vo2_max_status: 'N/A',
-          vo2_max_date: '',
+          vo2_max: vo2Max.value || 0,
+          vo2_max_status: vo2Max.status,
+          vo2_max_date: vo2Max.date,
           daily_activities: workouts.activities || []
         },
         heart_rate: {
@@ -465,29 +708,6 @@ const HomeScreen = () => {
           date: now.toISOString().split('T')[0]
         }
       });
-
-      // Fetch VO2 Max separately
-      AppleHealthKit.getVO2MaxSamples(
-        {
-          ...options,
-          ascending: false,
-          limit: 1, // Get most recent VO2 max
-        },
-        (err: string | null, results: any) => {
-          if (!err && results && results.length > 0) {
-            const latestVO2Max = results[0];
-            setGarminData(prevData => ({
-              ...prevData,
-              activity: {
-                ...prevData.activity!,
-                vo2_max: latestVO2Max.value || 0,
-                vo2_max_status: latestVO2Max.value ? 'Available' : 'N/A',
-                vo2_max_date: latestVO2Max.startDate || '',
-              }
-            }));
-          }
-        }
-      );
 
     } catch (error) {
       console.error("Error fetching health data:", error);
@@ -591,40 +811,154 @@ const HomeScreen = () => {
       }
 
       if (dataSource === 'apple' && Platform.OS === 'ios') {
-        const healthKitOptions = {
-          permissions: {
-            read: [
+        console.log('Starting HealthKit initialization process...');
+        console.log('Platform:', Platform.OS);
+        console.log('Device:', Platform.constants?.systemName, Platform.Version);
+        
+        // Check platform first
+        if (Platform.OS !== 'ios') {
+          console.log('Not iOS platform, HealthKit not available');
+        setHealthKitAvailable(false);
+        return;
+      }
+
+      const permissions = {
+        permissions: {
+          read: [
               'HeartRateVariability',
               'HeartRate',
               'Steps',
               'SleepAnalysis',
               'ActiveEnergyBurned',
               'DistanceWalkingRunning',
+              'Workout',
+              'Vo2Max'
             ],
             write: [],
           },
         };
 
-        AppleHealthKit.initHealthKit(healthKitOptions, (error: string) => {
+        try {
+          // First check if HealthKit is available on the device
+          console.log('Checking HealthKit availability...');
+          const isAvailable = await new Promise((resolve) => {
+            if (typeof AppleHealthKit.isAvailable !== 'function') {
+              console.error('isAvailable method not found on AppleHealthKit');
+              console.log('AppleHealthKit methods:', Object.keys(AppleHealthKit));
+              resolve(false);
+              return;
+            }
+            
+            AppleHealthKit.isAvailable((error: string, result: boolean) => {
+              if (error) {
+                console.error('Error checking HealthKit availability:', error);
+                resolve(false);
+                return;
+              }
+              console.log('HealthKit availability check result:', result);
+              resolve(result);
+            });
+          });
+
+          if (!isAvailable) {
+            console.log('HealthKit is not available on this device');
+            setHealthKitAvailable(false);
+            Alert.alert(
+              'HealthKit Not Available',
+              'Please check:\n\n1. You are using an iOS device\n2. Health app is installed\n3. Your device supports HealthKit\n4. You have granted permissions in Settings',
+              [{ text: 'OK' }]
+            );
+            return;
+          }
+
+          // Set HealthKit as available since we confirmed it is
+          await new Promise<void>((resolve) => {
+            setHealthKitAvailable(true);
+            // Use a short timeout to ensure state is updated
+            setTimeout(resolve, 0);
+          });
+
+          console.log('HealthKit is available, initializing with permissions:', permissions);
+          // Then initialize HealthKit
+      await new Promise<void>((resolve, reject) => {
+            if (typeof AppleHealthKit.initHealthKit !== 'function') {
+              console.error('initHealthKit method not found on AppleHealthKit');
+              console.log('Available methods:', Object.keys(AppleHealthKit));
+              setHealthKitAvailable(false);
+              reject(new Error('HealthKit initialization method not available'));
+              return;
+            }
+
+        AppleHealthKit.initHealthKit(permissions, (error: string) => {
           if (error) {
             console.error('Error initializing HealthKit:', error);
             setHealthKitAvailable(false);
+            reject(new Error(error));
           } else {
             console.log('HealthKit initialized successfully');
-            setHealthKitAvailable(true);
-            fetchHRVData();
+            resolve();
           }
         });
+      });
+
+          // After successful initialization, check permissions
+          console.log('Checking HealthKit permissions...');
+          await new Promise<void>((resolve, reject) => {
+            if (typeof AppleHealthKit.getAuthStatus !== 'function') {
+              console.error('getAuthStatus method not found on AppleHealthKit');
+              setHealthKitAvailable(false);
+              reject(new Error('HealthKit auth status method not available'));
+      return;
+    }
+
+            AppleHealthKit.getAuthStatus(permissions, (error: string, result: any) => {
+              if (error) {
+                console.error('Error checking HealthKit permissions:', error);
+                setHealthKitAvailable(false);
+                reject(error);
+              } else {
+                console.log('HealthKit permissions status:', JSON.stringify(result, null, 2));
+                if (result.permissions.read) {
+                  console.log('HealthKit read permissions granted');
+                  // Use setTimeout to ensure state is updated before fetching
+                  setTimeout(() => {
+                    console.log('Fetching data after permissions check...');
+                    fetchHRVData();
+                  }, 100);
+                } else {
+                  console.log('HealthKit read permissions not granted');
+                  setHealthKitAvailable(false);
+                  Alert.alert(
+                    'Permissions Required',
+                    'Please open your device Settings > Privacy > Health and grant all permissions for this app.',
+                    [{ text: 'OK' }]
+                  );
+                }
+                resolve();
+              }
+        });
+      });
+
+    } catch (error) {
+          console.error('HealthKit setup error:', error);
+          setHealthKitAvailable(false);
+          Alert.alert(
+            'HealthKit Error',
+            'Error setting up HealthKit. Please ensure:\n\n1. Health app is installed\n2. Permissions are granted in Settings\n3. Your device supports HealthKit',
+            [{ text: 'OK' }]
+          );
+        }
       } else if (dataSource === 'garmin') {
         await checkLogin();
+        }
+        
+        setIsInitialized(true);
+      } catch (error) {
+        console.error('Initialization error:', error);
+      setHealthKitAvailable(false);
+        setInitError(error instanceof Error ? error.message : ERROR_MESSAGES.INIT);
       }
-      
-      setIsInitialized(true);
-    } catch (error) {
-      console.error('Initialization error:', error);
-      setInitError(error instanceof Error ? error.message : ERROR_MESSAGES.INIT);
-    }
-  };
+    };
 
   // Data Source Selection Modal
   const DataSourceSelectionModal = () => (
@@ -818,15 +1152,29 @@ const HomeScreen = () => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>HRV & Stress Tracking</Text>
-        <TouchableOpacity
-          style={styles.sourceButton}
-          onPress={() => setSourceSelectionVisible(true)}
-        >
-          <Text style={styles.sourceButtonText}>
-            {dataSource === 'apple' ? 'Apple Watch' : 'Garmin'}
-          </Text>
-        </TouchableOpacity>
+      <Text style={styles.title}>HRV & Stress Tracking</Text>
+        <View style={styles.headerButtons}>
+          <TouchableOpacity
+            style={styles.refreshButton}
+            onPress={() => {
+              if (dataSource === 'apple') {
+                fetchHRVData();
+              } else if (dataSource === 'garmin') {
+                checkLogin();
+              }
+            }}
+          >
+            <Text style={styles.refreshButtonText}>↻</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.sourceButton}
+            onPress={() => setSourceSelectionVisible(true)}
+          >
+            <Text style={styles.sourceButtonText}>
+              {dataSource === 'apple' ? 'Apple Watch' : 'Garmin'}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
       
       {loading ? (
@@ -964,9 +1312,9 @@ const HomeScreen = () => {
           )}
 
   
-          
+
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Activities Today</Text>
+            <Text style={styles.sectionTitle}>Yesterday's Activities</Text>
             {garminData?.activity?.daily_activities ? (
               garminData.activity.daily_activities.length > 0 ? (
               garminData.activity.daily_activities.map((activity, index) => (
@@ -976,7 +1324,7 @@ const HomeScreen = () => {
                 </View>
               ))
             ) : (
-              <Text style={styles.noActivities}>No activities recorded today</Text>
+              <Text style={styles.noActivities}>No activities recorded yesterday</Text>
               )
             ) : (
               <Text style={styles.noActivities}>No activities data available</Text>
@@ -1053,13 +1401,13 @@ const HomeScreen = () => {
             </TouchableOpacity>
 
             {dataSource === 'garmin' && (
-              <TouchableOpacity 
-                style={[styles.button, styles.garminButton]}
+            <TouchableOpacity 
+              style={[styles.button, styles.garminButton]}
                 onPress={() => setGarminModalVisible(true)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.buttonText}>Garmin Login</Text>
-              </TouchableOpacity>
+              activeOpacity={0.7}
+            >
+              <Text style={styles.buttonText}>Garmin Login</Text>
+            </TouchableOpacity>
             )}
           </View>
         </ScrollView>
@@ -1116,27 +1464,27 @@ const HomeScreen = () => {
                 <Text style={styles.closeButton}>✕</Text>
               </TouchableOpacity>
             </View>
-            <TextInput
-              style={styles.input}
+      <TextInput
+        style={styles.input}
               placeholder="Name"
-              value={name}
-              onChangeText={setName}
-            />
-            <FlatList
-              data={questions}
-              keyExtractor={(item, index) => index.toString()}
-              renderItem={({ item, index }) => (
+        value={name}
+        onChangeText={setName}
+      />
+      <FlatList
+        data={questions}
+        keyExtractor={(item, index) => index.toString()}
+        renderItem={({ item, index }) => (
                 <View style={styles.questionContainer}>
                   <Text style={styles.questionText}>{item}</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={responses[index]}
-                    onChangeText={(text) => handleResponseChange(text, index)}
+            <TextInput
+              style={styles.input}
+              value={responses[index]}
+              onChangeText={(text) => handleResponseChange(text, index)}
                     placeholder="Ihre Antwort"
-                  />
-                </View>
-              )}
             />
+          </View>
+        )}
+      />
             <TouchableOpacity style={styles.button} onPress={submitSurvey}>
               <Text style={styles.buttonText}>Absenden</Text>
             </TouchableOpacity>
@@ -1530,6 +1878,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     marginBottom: 20,
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  refreshButton: {
+    backgroundColor: '#4CAF50',
+    padding: 8,
+    borderRadius: 8,
+    width: 35,
+    height: 35,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  refreshButtonText: {
+    fontSize: 20,
+    color: '#fff',
+    fontWeight: 'bold',
   },
   sourceButton: {
     backgroundColor: '#f0f0f0',

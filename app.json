@@ -11,15 +11,26 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSHealthShareUsageDescription": "This app requires access to your health data to track your heart rate variability, sleep, activity, and other health metrics to help monitor your stress levels and overall well-being.",
         "NSHealthUpdateUsageDescription": "This app requires access to write health data to track your health metrics and provide accurate stress monitoring.",
-        "UIBackgroundModes": ["fetch", "remote-notification"],
+        "UIBackgroundModes": [
+          "fetch",
+          "remote-notification"
+        ],
         "NSMotionUsageDescription": "This app requires motion access to track your activity levels."
       },
       "entitlements": {
         "com.apple.developer.healthkit": true,
-        "com.apple.developer.healthkit.access": ["health-records"],
+        "com.apple.developer.healthkit.access": [
+          "health-records"
+        ],
         "com.apple.developer.healthkit.background-delivery": true
       }
     },
-    "owner": "ananananas"
+    "owner": "ananananas",
+    "android": {
+      "package": "com.ananananas.myapp"
+    },
+    "plugins": [
+      "expo-router"
+    ]
   }
 }
