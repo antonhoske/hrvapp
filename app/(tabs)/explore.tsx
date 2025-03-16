@@ -717,7 +717,12 @@ const HomeScreen = () => {
   const fetchGarminData = async (storedEmail: string, storedPassword: string) => {
     setLoading(true);
     try {
-      const targetDate = "2025-02-15";  // Use February 15th, 2025
+      // Calculate yesterday's date
+      const now = new Date();
+      const yesterday = new Date(now);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const targetDate = yesterday.toISOString().split('T')[0];  // Format: YYYY-MM-DD
+      
       console.log('Fetching data for date:', targetDate);
       
       const requestBody = { 
@@ -960,6 +965,28 @@ const HomeScreen = () => {
       }
     };
 
+  const handleSourceChange = async (newSource: 'apple' | 'garmin') => {
+    // Clear existing data
+    setGarminData({
+      stress: null,
+      hrv: null,
+      sleep: null,
+      activity: null,
+      heart_rate: null
+    });
+    
+    // Update data source
+    setDataSource(newSource);
+    
+    // Initialize and fetch data for the new source
+    if (newSource === 'apple') {
+      await initializeApp();
+      fetchHRVData();
+    } else if (newSource === 'garmin') {
+      await checkLogin();
+    }
+  };
+
   // Data Source Selection Modal
   const DataSourceSelectionModal = () => (
     <Modal
@@ -1168,10 +1195,13 @@ const HomeScreen = () => {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.sourceButton}
-            onPress={() => setSourceSelectionVisible(true)}
+            onPress={() => {
+              const newSource = dataSource === 'apple' ? 'garmin' : 'apple';
+              handleSourceChange(newSource);
+            }}
           >
             <Text style={styles.sourceButtonText}>
-              {dataSource === 'apple' ? 'Apple Watch' : 'Garmin'}
+              {dataSource === 'apple' ? 'Switch to Garmin' : 'Switch to Apple Watch'}
             </Text>
           </TouchableOpacity>
         </View>
