@@ -17,6 +17,7 @@ import { doc, setDoc } from "firebase/firestore";
 import { getAuth, initializeAuth, Auth } from "firebase/auth";
 import Constants from 'expo-constants';
 
+
 // Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyBWzYmkdQj7LbVk7dIZzjsan_Eca9EQPrA",
@@ -167,9 +168,11 @@ const HomeScreen = () => {
     activity: null,
     heart_rate: null
   });
-  const [dataSource, setDataSource] = useState<'garmin' | 'apple' | null>(null);
+
+  const [dataSource, setDataSource] = useState<'garmin' | 'apple' | null>('apple');
   const [sourceSelectionVisible, setSourceSelectionVisible] = useState(true);
 
+  // PSS questions
   const questions = [
     "Wie gestresst fühlst du dich derzeit?",
     "Hast du in letzter Zeit Schlafprobleme?",
@@ -177,7 +180,12 @@ const HomeScreen = () => {
   ];
 
   // Helper functions for processing health data
-  const processSleepData = (sleepData: SleepSample[]) => {
+  const processSleepData = (sleepData: SleepSample[] | null) => {
+    if (!sleepData || sleepData.length === 0) {
+      console.error("No sleep data available");
+      return { startTime: null, endTime: null, totalSleep: 0 };
+    }
+
     let totalSleep = 0;
     let deepSleep = 0;
     let lightSleep = 0;
@@ -334,8 +342,8 @@ const HomeScreen = () => {
 
   const fetchHRVData = async () => {
     console.log('Starting fetchHRVData, healthKitAvailable:', healthKitAvailable);
-    if (!healthKitAvailable) {
-      console.log("HealthKit is not available");
+    if (dataSource === 'garmin') {
+      console.log("Garmin is not available");
       return;
     }
 
@@ -609,9 +617,13 @@ const HomeScreen = () => {
       const sleepSummary = processSleepData(sleepData);
 
       // Calculate HRV Summary using sleep times
-      const hrvSummary = {
-        lastNightAvg: calculateAverageHRV(hrvData, sleepSummary.startTime, sleepSummary.endTime),
-        lastNight5MinHigh: findHighestHRV(hrvData, sleepSummary.startTime, sleepSummary.endTime),
+      if (!sleepSummary?.startTime || !sleepSummary?.endTime) {
+        console.error("Sleep window not available, skipping HRV calculation.");
+      } else {
+        const hrvSummary = {
+          lastNightAvg: calculateAverageHRV(hrvData, sleepSummary.startTime, sleepSummary.endTime),
+          lastNight5MinHigh: findHighestHRV(hrvData, sleepSummary.startTime, sleepSummary.endTime),
+        };
         readings: hrvData
           .filter(reading => {
             if (!sleepSummary.startTime || !sleepSummary.endTime) return true;
@@ -712,6 +724,49 @@ const HomeScreen = () => {
     } catch (error) {
       console.error("Error fetching health data:", error);
     }
+    
+    await uploadGarminData(garminData);
+  };
+
+  const uploadGarminData = async (garminData: GarminData) => {
+    if (!db) {
+      console.error('Firebase not initialized');
+      Alert.alert('Error', 'Database connection not available');
+      return;
+    }
+
+    const firestore = db as Firestore;
+
+    try {
+      // Generate or get a persistent device ID using SecureStore
+      let deviceId = await SecureStore.getItemAsync('device_id');
+      if (!deviceId) {
+        deviceId = `device_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+        await SecureStore.setItemAsync('device_id', deviceId);
+      }
+
+      // Add timestamp and format data for upload
+      const dataToUpload = {
+        ...garminData,
+        timestamp: new Date(),
+        deviceId: deviceId,
+        uploadDate: new Date().toISOString().split('T')[0]
+      };
+
+      // Upload to device-specific collection
+      const deviceGarminRef = doc(firestore, `devices/${deviceId}/garminData`, new Date().toISOString().split('T')[0]);
+      await setDoc(deviceGarminRef, dataToUpload);
+
+      // Upload to main collection for aggregated data
+      const mainGarminRef = doc(collection(firestore, 'garminData'), `${deviceId}_${new Date().toISOString().split('T')[0]}`);
+      await setDoc(mainGarminRef, dataToUpload);
+
+      console.log("Garmin data uploaded successfully to both collections");
+    } catch (error) {
+      console.error("Error uploading Garmin data:", error);
+      Alert.alert('Error', 'Failed to upload data to database');
+      throw error;
+    }
   };
 
   const fetchGarminData = async (storedEmail: string, storedPassword: string) => {
@@ -753,10 +808,7 @@ const HomeScreen = () => {
 
       const data = await response.json();
       
-      if (!data || !data.activity) {
-        console.error('Invalid data received:', data);
-        throw new Error('Invalid data received from server');
-      }
+     
       
       setGarminData(data);
       await uploadGarminData(data);
@@ -781,17 +833,24 @@ const HomeScreen = () => {
     }
   };
 
+  //check if credentials already exist
   const checkLogin = async () => {
     const storedEmail = await SecureStore.getItemAsync("garmin_email");
     const storedPassword = await SecureStore.getItemAsync("garmin_password");
-
+    console.log('storedEmail', storedEmail);
+    console.log('storedPassword', storedPassword);
+    //check if credentials already exist
     if (!storedEmail || !storedPassword) {
+      console.log('no credentials found');
       setGarminModalVisible(true);
-    } else {
+    } 
+    else {
+      console.log('credentials found');
       fetchGarminData(storedEmail, storedPassword);
     }
   };
 
+  //login with new credentials
   const handleLogin = async () => {
     await SecureStore.setItemAsync("garmin_email", email);
     await SecureStore.setItemAsync("garmin_password", password);
@@ -804,15 +863,19 @@ const HomeScreen = () => {
   }, []);
 
   useEffect(() => {
-    if (dataSource) {
+    if (dataSource && !isInitialized) {
+      console.log(`Initializing app for: ${dataSource}`);
       initializeApp();
     }
   }, [dataSource]);
 
   const initializeApp = async () => {
     try {
-      if (!dataSource) {
-        return;
+      if (await SecureStore.getItemAsync('garmin_email') && await SecureStore.getItemAsync('garmin_password')) {
+        setDataSource('garmin');
+      }
+      else {
+        setDataSource('apple');
       }
 
       if (dataSource === 'apple' && Platform.OS === 'ios') {
@@ -965,27 +1028,42 @@ const HomeScreen = () => {
       }
     };
 
-  const handleSourceChange = async (newSource: 'apple' | 'garmin') => {
-    // Clear existing data
-    setGarminData({
-      stress: null,
-      hrv: null,
-      sleep: null,
-      activity: null,
-      heart_rate: null
-    });
+    const handleSourceChange = async (newSource: 'apple' | 'garmin') => {
+      console.log(`Switching data source to: ${newSource}`);
+      
+      // Clear existing data
+      setGarminData({
+        stress: null,
+        hrv: null,
+        sleep: null,
+        activity: null,
+        heart_rate: null
+      });
     
-    // Update data source
-    setDataSource(newSource);
+      // Update data source
+      setDataSource(newSource);
+      
+      if (newSource === 'garmin') {
+        console.log("Setting Garmin modal to visible");
+        setGarminModalVisible(true); 
     
-    // Initialize and fetch data for the new source
-    if (newSource === 'apple') {
-      await initializeApp();
-      fetchHRVData();
-    } else if (newSource === 'garmin') {
-      await checkLogin();
-    }
-  };
+        setTimeout(async () => {
+          const storedEmail = await SecureStore.getItemAsync("garmin_email");
+          const storedPassword = await SecureStore.getItemAsync("garmin_password");
+          console.log(`Stored Email: ${storedEmail}, Stored Password: ${storedPassword ? "Exists" : "Not Found"}`);
+          
+          if (storedEmail && storedPassword) {
+            console.log("Closing Garmin modal since credentials exist");
+            setGarminModalVisible(false);
+            await fetchGarminData(storedEmail, storedPassword);
+          }
+        }, 1000); 
+
+        
+      }
+    };
+    
+
 
   // Data Source Selection Modal
   const DataSourceSelectionModal = () => (
@@ -1013,8 +1091,8 @@ const HomeScreen = () => {
             <TouchableOpacity
               style={[styles.button, styles.garminButton]}
               onPress={() => {
-                setDataSource('garmin');
                 setSourceSelectionVisible(false);
+                handleSourceChange('garmin');
               }}
             >
               <Text style={styles.buttonText}>Garmin</Text>
@@ -1024,10 +1102,6 @@ const HomeScreen = () => {
       </View>
     </Modal>
   );
-
-  if (!dataSource) {
-    return <DataSourceSelectionModal />;
-  }
 
   if (!isInitialized) {
     return (
@@ -1040,46 +1114,7 @@ const HomeScreen = () => {
     );
   }
 
-  const uploadGarminData = async (garminData: GarminData) => {
-    if (!db) {
-      console.error('Firebase not initialized');
-      Alert.alert('Error', 'Database connection not available');
-      return;
-    }
-
-    const firestore = db as Firestore;
-
-    try {
-      // Generate or get a persistent device ID using SecureStore
-      let deviceId = await SecureStore.getItemAsync('device_id');
-      if (!deviceId) {
-        deviceId = `device_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-        await SecureStore.setItemAsync('device_id', deviceId);
-      }
-
-      // Add timestamp and format data for upload
-      const dataToUpload = {
-        ...garminData,
-        timestamp: new Date(),
-        deviceId: deviceId,
-        uploadDate: new Date().toISOString().split('T')[0]
-      };
-
-      // Upload to device-specific collection
-      const deviceGarminRef = doc(firestore, `devices/${deviceId}/garminData`, new Date().toISOString().split('T')[0]);
-      await setDoc(deviceGarminRef, dataToUpload);
-
-      // Upload to main collection for aggregated data
-      const mainGarminRef = doc(collection(firestore, 'garminData'), `${deviceId}_${new Date().toISOString().split('T')[0]}`);
-      await setDoc(mainGarminRef, dataToUpload);
-
-      console.log("Garmin data uploaded successfully to both collections");
-    } catch (error) {
-      console.error("Error uploading Garmin data:", error);
-      Alert.alert('Error', 'Failed to upload data to database');
-      throw error;
-    }
-  };
+ 
 
   const handleResponseChange = (text: string, index: number) => {
     const newResponses = [...responses];
@@ -1178,8 +1213,8 @@ const HomeScreen = () => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-      <Text style={styles.title}>HRV & Stress Tracking</Text>
+      <View style={styles.sectionTitle}>
+      <Text style={styles.sectionTitle}>Willkommen! </Text>
         <View style={styles.headerButtons}>
           <TouchableOpacity
             style={styles.refreshButton}
@@ -1193,6 +1228,17 @@ const HomeScreen = () => {
           >
             <Text style={styles.refreshButtonText}>↻</Text>
           </TouchableOpacity>
+
+          {dataSource === 'garmin' && (
+            <TouchableOpacity
+              style={[styles.garminButton, styles.sourceButton]}
+                onPress={() => setGarminModalVisible(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.sourceButtonText}>Login ändern</Text>
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
             style={styles.sourceButton}
             onPress={() => {
@@ -1201,7 +1247,7 @@ const HomeScreen = () => {
             }}
           >
             <Text style={styles.sourceButtonText}>
-              {dataSource === 'apple' ? 'Switch to Garmin' : 'Switch to Apple Watch'}
+              {dataSource === 'apple' ? 'Garmin verknüpfen' : 'Apple Watch verknüpfen'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -1238,7 +1284,7 @@ const HomeScreen = () => {
 
           {/* Sleep Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Sleep Analysis</Text>
+            <Text style={styles.sectionTitle}>Schlafanalyse</Text>
             
             {/* Sleep Summary */}
             {garminData?.sleep?.summary ? (
@@ -1344,7 +1390,7 @@ const HomeScreen = () => {
   
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Yesterday's Activities</Text>
+            <Text style={styles.sectionTitle}>Gestrige Aktivitäten</Text>
             {garminData?.activity?.daily_activities ? (
               garminData.activity.daily_activities.length > 0 ? (
               garminData.activity.daily_activities.map((activity, index) => (
@@ -1363,7 +1409,7 @@ const HomeScreen = () => {
 
           {/* New HRV Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Heart Rate Variability</Text>
+            <Text style={styles.sectionTitle}>Herzfrequenzvariabilität</Text>
             {garminData?.hrv ? (
               <>
                 <View style={styles.hrvSummary}>
@@ -1429,16 +1475,6 @@ const HomeScreen = () => {
             >
               <Text style={styles.buttonText}>Persönliche Informationen</Text>
             </TouchableOpacity>
-
-            {dataSource === 'garmin' && (
-            <TouchableOpacity 
-              style={[styles.button, styles.garminButton]}
-                onPress={() => setGarminModalVisible(true)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.buttonText}>Garmin Login</Text>
-            </TouchableOpacity>
-            )}
           </View>
         </ScrollView>
       )}
@@ -1635,7 +1671,6 @@ const HomeScreen = () => {
         </View>
       </Modal>
 
-      <DataSourceSelectionModal />
     </View>
   );
 };
@@ -1677,7 +1712,6 @@ const styles = StyleSheet.create({
   },
   garminButton: {
     backgroundColor: '#FF6B00', // Garmin's brand color
-    marginTop: 10,
   },
   buttonText: {
     color: '#fff',
@@ -1912,6 +1946,7 @@ const styles = StyleSheet.create({
   headerButtons: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: 20,
     gap: 10,
   },
   refreshButton: {

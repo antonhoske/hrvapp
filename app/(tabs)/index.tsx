@@ -9,8 +9,8 @@ import React from "react";
 const TrainingScreen = () => {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Start Your Training</Text>
-      <Text style={styles.instruction}>Follow the instructions to begin your training!</Text>
+      <Text style={styles.title}>Starte dein Trainnig</Text>
+      <Text style={styles.instruction}>Folge den Anweisungen um dein Training zu beginnen!</Text>
     </View>
   );
 };
@@ -18,7 +18,7 @@ const TrainingScreen = () => {
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: "center", alignItems: "center" },
   title: { fontSize: 24, fontWeight: "bold" },
-  instruction: { fontSize: 18, marginTop: 10 },
+  instruction: { fontSize: 18, marginTop: 10, marginHorizontal: 20, textAlign: "center" },
 });
 
 export default TrainingScreen;

@@ -103,22 +103,30 @@ def get_all_data():
             sleep_data = client.get_sleep_data(target_date)
             if sleep_data and 'dailySleepDTO' in sleep_data:
                 daily_sleep = sleep_data['dailySleepDTO']
-                response["sleep"] = {
-                    "summary": {
-                        "total_sleep_seconds": daily_sleep.get('sleepTimeSeconds', 0),
-                        "deep_sleep_seconds": daily_sleep.get('deepSleepSeconds', 0),
-                        "light_sleep_seconds": daily_sleep.get('lightSleepSeconds', 0),
-                        "rem_sleep_seconds": daily_sleep.get('remSleepSeconds', 0),
-                        "awake_seconds": daily_sleep.get('awakeSleepSeconds', 0),
-                        "sleep_start": daily_sleep.get('sleepStartTimestampLocal'),
-                        "sleep_end": daily_sleep.get('sleepEndTimestampLocal'),
-                        "sleep_score": str(daily_sleep.get('sleepScoreValue', 'N/A')),
-                        "average_hrv": sleep_data.get('hrvSummary', {}).get('avgHrv'),
-                        "lowest_hrv": sleep_data.get('hrvSummary', {}).get('lowHrv'),
-                        "highest_hrv": sleep_data.get('hrvSummary', {}).get('highHrv')
-                    },
-                    "phases": []
-                }
+            sleep_start = daily_sleep.get('sleepStartTimestampLocal')
+            sleep_end = daily_sleep.get('sleepEndTimestampLocal')
+
+            if not sleep_start or not sleep_end:
+                logger.warning("Sleep data is missing timestamps!")
+                sleep_start, sleep_end = None, None  # Prevents issues later
+
+            response["sleep"] = {
+                "summary": {
+                    "total_sleep_seconds": daily_sleep.get('sleepTimeSeconds', 0),
+                    "deep_sleep_seconds": daily_sleep.get('deepSleepSeconds', 0),
+                    "light_sleep_seconds": daily_sleep.get('lightSleepSeconds', 0),
+                    "rem_sleep_seconds": daily_sleep.get('remSleepSeconds', 0),
+                    "awake_seconds": daily_sleep.get('awakeSleepSeconds', 0),
+                    "sleep_start": sleep_start,
+                    "sleep_end": sleep_end,
+                    "sleep_score": str(daily_sleep.get('sleepScoreValue', 'N/A')),
+                    "average_hrv": sleep_data.get('hrvSummary', {}).get('avgHrv'),
+                    "lowest_hrv": sleep_data.get('hrvSummary', {}).get('lowHrv'),
+                    "highest_hrv": sleep_data.get('hrvSummary', {}).get('highHrv')
+                },
+                "phases": []
+            }
+
         except Exception as e:
             logger.error(f"Error fetching sleep data: {e}")
         
@@ -128,6 +136,10 @@ def get_all_data():
             activities = client.get_activities(0, 10)  # Get recent activities
             
             if stats:
+                total_distance = stats.get("totalDistanceMeters")
+                if total_distance is None:
+                    total_distance = 0  # Default to 0 instead of None
+
                 response["activity"] = {
                     "steps": stats.get("totalSteps", 0),
                     "calories_burned": stats.get("totalKilocalories", 0),
@@ -135,7 +147,7 @@ def get_all_data():
                         stats.get("moderateIntensityMinutes", 0) +
                         stats.get("vigorousIntensityMinutes", 0)
                     ),
-                    "distance_km": stats.get("totalDistanceMeters", 0) / 1000,
+                    "distance_km": total_distance / 1000,  # Safe division
                     "floors_climbed": stats.get("floorsAscended", 0),
                     "active_time_seconds": stats.get("activeTimeSeconds", 0),
                     "date": target_date,
