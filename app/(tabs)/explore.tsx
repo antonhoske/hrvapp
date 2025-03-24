@@ -111,6 +111,7 @@ interface GarminData {
     vo2_max_status: string;
     vo2_max_date: string;
     daily_activities: { type: string; duration_minutes: number }[];
+    mindful_minutes: number;
   } | null;
   heart_rate: {
     resting_heart_rate: number;
@@ -349,45 +350,35 @@ const HomeScreen = () => {
 
     try {
       const now = new Date();
+      console.log('Current date/time:', now.toISOString());
       
-      // Set start date to midnight of yesterday
-      const startDate = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate() - 1, // yesterday
-        0, 0, 0, 0
-      );
+      // Set start date to beginning of yesterday (00:00:00)
+      const startDate = new Date();
+      startDate.setDate(now.getDate() - 1);
+      startDate.setHours(0, 0, 0, 0);
       
-      // Set end date to midnight of today
-      const endDate = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate() - 1, // yesterday
-        23, 59, 59, 999
-      );
+      // Set end date to end of yesterday (23:59:59)
+      const endDate = new Date();
+      endDate.setDate(now.getDate() - 1);
+      endDate.setHours(23, 59, 59, 999);
 
       // For sleep data, we want to look at a wider window to catch the full sleep period
-      // From 6 PM yesterday to 11 AM today
-      const sleepStartDate = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate() - 1, // yesterday
-        18, 0, 0, 0 // 6 PM
-      );
-      const sleepEndDate = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(), // today
-        11, 0, 0, 0 // 11 AM
-      );
+      // From 6 PM two days ago to 11 AM yesterday
+      const sleepStartDate = new Date();
+      sleepStartDate.setDate(now.getDate() - 2);
+      sleepStartDate.setHours(18, 0, 0, 0); // 6 PM
+      
+      const sleepEndDate = new Date();
+      sleepEndDate.setDate(now.getDate() - 1);
+      sleepEndDate.setHours(11, 0, 0, 0); // 11 AM
       
       console.log('Time ranges for data fetching:');
       console.log('Activity data window (yesterday):');
-      console.log('- Start:', startDate.toLocaleString());
-      console.log('- End:', endDate.toLocaleString());
+      console.log('- Start:', startDate.toLocaleString(), '(', startDate.toISOString(), ')');
+      console.log('- End:', endDate.toLocaleString(), '(', endDate.toISOString(), ')');
       console.log('Sleep/HRV data window:');
-      console.log('- Start (6 PM yesterday):', sleepStartDate.toLocaleString());
-      console.log('- End (11 AM today):', sleepEndDate.toLocaleString());
+      console.log('- Start (6 PM two days ago):', sleepStartDate.toLocaleString(), '(', sleepStartDate.toISOString(), ')');
+      console.log('- End (11 AM yesterday):', sleepEndDate.toLocaleString(), '(', sleepEndDate.toISOString(), ')');
 
       const options = {
         startDate: startDate.toISOString(),
@@ -412,6 +403,7 @@ const HomeScreen = () => {
       let distance = { value: 0 };
       let workouts = { activeMinutes: 0, activities: [] };
       let vo2Max = { value: 0, date: '', status: 'N/A' };
+      let mindfulMinutes = 0; // Initialize mindful minutes
 
       // Fetch workouts first to calculate active minutes
       try {
@@ -519,29 +511,43 @@ const HomeScreen = () => {
 
       try {
         const distanceResult = await new Promise<any>((resolve, reject) => {
+          console.log('Attempting to fetch distance data...');
           if (typeof AppleHealthKit.getDistanceWalkingRunning !== 'function') {
+            console.error('ERROR: getDistanceWalkingRunning is not a function!', 
+              'Available methods:', Object.keys(AppleHealthKit).join(', '));
             resolve({ value: 0 });
             return;
           }
+          console.log('getDistanceWalkingRunning is available, calling with options:', JSON.stringify(options, null, 2));
           AppleHealthKit.getDistanceWalkingRunning(
             {
               ...options,
               includeManuallyAdded: true,
             },
-            (err: string | null, results: any[]) => {
+            (err: string | null, results: any) => {
               if (err) {
                 console.error('Error fetching distance:', err);
                 resolve({ value: 0 });
               } else if (Array.isArray(results)) {
+                console.log('Distance data received (array):', JSON.stringify(results, null, 2));
+                console.log('Number of distance samples:', results.length);
                 const totalDistance = results.reduce((sum: number, item: any) => sum + (item.value || 0), 0);
+                console.log('Calculated total distance:', totalDistance);
                 resolve({ value: totalDistance });
+              } else if (results && typeof results === 'object' && 'value' in results) {
+                // Handle single object response
+                console.log('Distance data received (single object):', JSON.stringify(results, null, 2));
+                console.log('Single object distance value:', results.value);
+                resolve({ value: results.value });
               } else {
+                console.error('Distance results in unexpected format:', results);
                 resolve({ value: 0 });
               }
             }
           );
         });
         distance = distanceResult;
+        console.log('Final distance value set:', distance.value);
       } catch (error) {
         console.error('Error fetching distance:', error);
       }
@@ -616,28 +622,6 @@ const HomeScreen = () => {
       // Process Sleep Data
       const sleepSummary = processSleepData(sleepData);
 
-      // Calculate HRV Summary using sleep times
-      if (!sleepSummary?.startTime || !sleepSummary?.endTime) {
-        console.error("Sleep window not available, skipping HRV calculation.");
-      } else {
-        const hrvSummary = {
-          lastNightAvg: calculateAverageHRV(hrvData, sleepSummary.startTime, sleepSummary.endTime),
-          lastNight5MinHigh: findHighestHRV(hrvData, sleepSummary.startTime, sleepSummary.endTime),
-        };
-        readings: hrvData
-          .filter(reading => {
-            if (!sleepSummary.startTime || !sleepSummary.endTime) return true;
-            const readingTime = new Date(reading.startDate).getTime();
-            const sleepStartTime = new Date(sleepSummary.startTime).getTime();
-            const sleepEndTime = new Date(sleepSummary.endTime).getTime();
-            return readingTime >= sleepStartTime && readingTime <= sleepEndTime;
-          })
-          .map(reading => ({
-            time: reading.startDate,
-            value: Math.round(reading.value)
-          }))
-      };
-
       // Fetch VO2 Max
       try {
         const vo2MaxResults = await new Promise<any>((resolve, reject) => {
@@ -673,33 +657,106 @@ const HomeScreen = () => {
         console.error('Error fetching VO2 Max:', error);
       }
 
+      // Fetch mindfulness sessions
+      try {
+        // Initialize mindfulMinutes to 0
+        mindfulMinutes = 0;
+        
+        // Fetch mindfulness sessions from HealthKit
+        const mindfulnessData = await new Promise<any[]>((resolve, reject) => {
+          if (typeof AppleHealthKit.getMindfulSession !== 'function') {
+            console.log('getMindfulSession not available in AppleHealthKit');
+            resolve([]);
+            return;
+          }
+          
+          AppleHealthKit.getMindfulSession(
+            {
+              ...options,
+              type: 'MindfulSession'
+            },
+            (err: string | null, results: any[]) => {
+              if (err) {
+                console.error('Error fetching mindfulness sessions:', err);
+                resolve([]);
+              } else if (Array.isArray(results)) {
+                console.log('Mindfulness sessions fetched:', results.length);
+                console.log('Raw mindfulness data:', JSON.stringify(results, null, 2));
+                resolve(results);
+              } else {
+                resolve([]);
+              }
+            }
+          );
+        });
+        
+        // Calculate total mindfulness minutes
+        if (mindfulnessData && mindfulnessData.length > 0) {
+          mindfulnessData.forEach(session => {
+            if (session.startDate && session.endDate) {
+              const start = new Date(session.startDate);
+              const end = new Date(session.endDate);
+              const durationMinutes = (end.getTime() - start.getTime()) / (1000 * 60);
+              mindfulMinutes += durationMinutes;
+            }
+          });
+          
+          // Round to nearest integer
+          mindfulMinutes = Math.round(mindfulMinutes);
+          console.log('Total mindfulness minutes:', mindfulMinutes);
+        }
+      } catch (error) {
+        console.error('Error fetching mindfulness data:', error);
+      }
+
       // Update state with all the data
       setGarminData({
         stress: null,
         hrv: {
           summary: {
-            lastNightAvg: hrvSummary.lastNightAvg,
-            lastNight5MinHigh: hrvSummary.lastNight5MinHigh,
+            lastNightAvg: sleepSummary && sleepSummary.startTime && sleepSummary.endTime ? 
+              calculateAverageHRV(hrvData, sleepSummary.startTime, sleepSummary.endTime) : 
+              (hrvData.length ? Math.round(hrvData.reduce((sum, item) => sum + item.value, 0) / hrvData.length) : 0),
+            lastNight5MinHigh: sleepSummary && sleepSummary.startTime && sleepSummary.endTime ? 
+              findHighestHRV(hrvData, sleepSummary.startTime, sleepSummary.endTime) : 
+              (hrvData.length ? Math.max(...hrvData.map(d => d.value)) : 0),
             status: 'Available',
             feedbackPhrase: ''
           },
-          readings: hrvSummary.readings
+          readings: sleepSummary && sleepSummary.startTime && sleepSummary.endTime ? 
+            hrvData
+              .filter(reading => {
+                const readingTime = new Date(reading.startDate).getTime();
+                const sleepStartTime = new Date(sleepSummary.startTime).getTime();
+                const sleepEndTime = new Date(sleepSummary.endTime).getTime();
+                return readingTime >= sleepStartTime && readingTime <= sleepEndTime;
+              })
+              .map(reading => ({
+                time: reading.startDate,
+                value: Math.round(reading.value)
+              })) : 
+            hrvData.map(reading => ({
+              time: reading.startDate,
+              value: Math.round(reading.value)
+            }))
         },
         sleep: {
           summary: {
-            total_sleep_seconds: sleepSummary.totalSleep,
-            deep_sleep_seconds: sleepSummary.deepSleep,
-            light_sleep_seconds: sleepSummary.lightSleep,
-            rem_sleep_seconds: sleepSummary.remSleep,
-            awake_seconds: sleepSummary.awake,
-            sleep_start: sleepSummary.startTime,
-            sleep_end: sleepSummary.endTime,
+            total_sleep_seconds: sleepSummary?.totalSleep || 0,
+            deep_sleep_seconds: sleepSummary?.deepSleep || 0,
+            light_sleep_seconds: sleepSummary?.lightSleep || 0,
+            rem_sleep_seconds: sleepSummary?.remSleep || 0,
+            awake_seconds: sleepSummary?.awake || 0,
+            sleep_start: sleepSummary?.startTime || '',
+            sleep_end: sleepSummary?.endTime || '',
             sleep_score: 'N/A',
-            average_hrv: hrvSummary.lastNightAvg,
-            lowest_hrv: Math.min(...(hrvData.length ? hrvData.map(d => d.value) : [0])),
-            highest_hrv: Math.max(...(hrvData.length ? hrvData.map(d => d.value) : [0]))
+            average_hrv: sleepSummary && sleepSummary.startTime && sleepSummary.endTime ? 
+              calculateAverageHRV(hrvData, sleepSummary.startTime, sleepSummary.endTime) : 
+              (hrvData.length ? Math.round(hrvData.reduce((sum, item) => sum + item.value, 0) / hrvData.length) : 0),
+            lowest_hrv: hrvData.length ? Math.min(...hrvData.map(d => d.value)) : 0,
+            highest_hrv: hrvData.length ? Math.max(...hrvData.map(d => d.value)) : 0
           },
-          phases: sleepSummary.phases
+          phases: sleepSummary?.phases || []
         },
         activity: {
           steps: steps.value || 0,
@@ -712,7 +769,8 @@ const HomeScreen = () => {
           vo2_max: vo2Max.value || 0,
           vo2_max_status: vo2Max.status,
           vo2_max_date: vo2Max.date,
-          daily_activities: workouts.activities || []
+          daily_activities: workouts.activities || [],
+          mindful_minutes: mindfulMinutes || 0
         },
         heart_rate: {
           resting_heart_rate: calculateRestingHeartRate(hrvData),
@@ -808,11 +866,56 @@ const HomeScreen = () => {
 
       const data = await response.json();
       
-     
+      // Save current data to preserve Apple HealthKit values if needed
+      const currentData = {...garminData};
+      
+      // Make sure activity structure exists
+      if (!data.activity) {
+        data.activity = {
+          steps: 0,
+          calories_burned: 0,
+          active_minutes: 0,
+          distance_km: 0,
+          floors_climbed: 0,
+          active_time_seconds: 0,
+          date: targetDate,
+          vo2_max: 0,
+          vo2_max_status: 'N/A',
+          vo2_max_date: '',
+          daily_activities: [],
+          mindful_minutes: 0
+        };
+      }
+      
+      // If there are no real values from Garmin but we have Apple HealthKit data, preserve it
+      if (currentData.activity) {
+        // Check if Garmin data is zero/null but we have values from Apple
+        if (data.activity.steps === 0 && currentData.activity.steps > 0) {
+          console.log("Using Apple HealthKit steps data instead of Garmin zeros");
+          data.activity.steps = currentData.activity.steps;
+        }
+        
+        if (data.activity.calories_burned === 0 && currentData.activity.calories_burned > 0) {
+          console.log("Using Apple HealthKit calories data instead of Garmin zeros");
+          data.activity.calories_burned = currentData.activity.calories_burned;
+        }
+        
+        if (data.activity.distance_km === 0 && currentData.activity.distance_km > 0) {
+          console.log("Using Apple HealthKit distance data instead of Garmin zeros");
+          data.activity.distance_km = currentData.activity.distance_km;
+        }
+        
+        if (data.activity.mindful_minutes === 0 && currentData.activity.mindful_minutes > 0) {
+          console.log("Using Apple HealthKit mindfulness data instead of Garmin zeros");
+          data.activity.mindful_minutes = currentData.activity.mindful_minutes;
+        }
+      } else if (!data.activity.mindful_minutes) {
+        // Ensure mindful_minutes is at least initialized
+        data.activity.mindful_minutes = 0;
+      }
       
       setGarminData(data);
       await uploadGarminData(data);
-
     } catch (error) {
       console.error("Error fetching Garmin data:", error);
       if (error instanceof Error) {
@@ -900,7 +1003,8 @@ const HomeScreen = () => {
               'ActiveEnergyBurned',
               'DistanceWalkingRunning',
               'Workout',
-              'Vo2Max'
+              'Vo2Max',
+              'MindfulSession'
             ],
             write: [],
           },
@@ -1031,14 +1135,58 @@ const HomeScreen = () => {
     const handleSourceChange = async (newSource: 'apple' | 'garmin') => {
       console.log(`Switching data source to: ${newSource}`);
       
-      // Clear existing data
+      // Capture existing data before clearing
+      const previousData = {...garminData};
+      
+      // If switching from Apple to Garmin, preserve activity data
+      if (dataSource === 'apple' && newSource === 'garmin' && previousData.activity) {
+        console.log("Preserving Apple HealthKit data when switching to Garmin");
+        
+        // Clear existing data but preserve activity metrics
       setGarminData({
         stress: null,
         hrv: null,
         sleep: null,
-        activity: null,
+          activity: {
+            // Keep existing activity values if available, otherwise use defaults
+            steps: previousData.activity.steps || 0,
+            calories_burned: previousData.activity.calories_burned || 0,
+            active_minutes: previousData.activity.active_minutes || 0,
+            distance_km: previousData.activity.distance_km || 0,
+            floors_climbed: previousData.activity.floors_climbed || 0,
+            active_time_seconds: previousData.activity.active_time_seconds || 0,
+            date: new Date().toISOString().split('T')[0],
+            vo2_max: previousData.activity.vo2_max || 0,
+            vo2_max_status: previousData.activity.vo2_max_status || 'N/A',
+            vo2_max_date: previousData.activity.vo2_max_date || '',
+            daily_activities: previousData.activity.daily_activities || [],
+            mindful_minutes: previousData.activity.mindful_minutes || 0
+          },
         heart_rate: null
       });
+      } else {
+        // Normal reset for other switches
+        setGarminData({
+          stress: null,
+          hrv: null,
+          sleep: null,
+          activity: {
+            steps: 0,
+            calories_burned: 0,
+            active_minutes: 0,
+            distance_km: 0,
+            floors_climbed: 0,
+            active_time_seconds: 0,
+            date: new Date().toISOString().split('T')[0],
+            vo2_max: 0,
+            vo2_max_status: 'N/A',
+            vo2_max_date: '',
+            daily_activities: [],
+            mindful_minutes: 0
+          },
+          heart_rate: null
+        });
+      }
     
       // Update data source
       setDataSource(newSource);
@@ -1137,10 +1285,18 @@ const HomeScreen = () => {
         return;
       }
 
+      // Generate or get a persistent device ID using SecureStore
+      let deviceId = await SecureStore.getItemAsync('device_id');
+      if (!deviceId) {
+        deviceId = `device_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+        await SecureStore.setItemAsync('device_id', deviceId);
+      }
+
       const surveyData = {
         name,
         responses,
         timestamp: new Date(),
+        deviceId: deviceId,
         stressData: stressData ? {
           hrv: stressData.hrv,
           timestamp: stressData.timestamp,
@@ -1176,10 +1332,18 @@ const HomeScreen = () => {
         return;
       }
 
+      // Generate or get a persistent device ID using SecureStore
+      let deviceId = await SecureStore.getItemAsync('device_id');
+      if (!deviceId) {
+        deviceId = `device_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+        await SecureStore.setItemAsync('device_id', deviceId);
+      }
+
       const personalInfoCollection = collection(firestore, "personal_info");
       await addDoc(personalInfoCollection, {
         ...personalInfo,
-        timestamp: new Date()
+        timestamp: new Date(),
+        deviceId: deviceId
       });
 
       alert("Persönliche Informationen erfolgreich gespeichert!");
@@ -1368,6 +1532,10 @@ const HomeScreen = () => {
               <View style={styles.dataRow}>
                 <Text style={styles.dataLabel}>Distanz:</Text>
                 <Text style={styles.dataValue}>{garminData.activity.distance_km?.toFixed(1) || 'N/A'} km</Text>
+              </View>
+              <View style={styles.dataRow}>
+                <Text style={styles.dataLabel}>Achtsamkeitsminuten:</Text>
+                <Text style={styles.dataValue}>{garminData.activity.mindful_minutes !== undefined && garminData.activity.mindful_minutes !== null ? garminData.activity.mindful_minutes : 'N/A'}</Text>
               </View>
               <View style={styles.row}>
                 <Text style={styles.label}>VO2 Max:</Text>
