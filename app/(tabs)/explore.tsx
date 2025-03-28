@@ -1,3 +1,4 @@
+import { uploadHistoricalData } from "../utils/historicalUpload";
 import { StyleSheet, View, Text, ActivityIndicator, TouchableOpacity, Modal, TextInput, FlatList, Button, ScrollView, Alert, Platform } from "react-native";
 import React, { useEffect, useState } from "react";
 import * as SecureStore from "expo-secure-store";
@@ -989,9 +990,9 @@ const HomeScreen = () => {
   };
 
   const fetchHRVData = async () => {
-    
+    setLoading(true);
     if (dataSource === 'garmin') {
-      
+      setLoading(false);
       return;
     }
 
@@ -1404,11 +1405,13 @@ const HomeScreen = () => {
         }
       });
 
+      // Upload data inside the try block
+      await uploadGarminData(garminData);
     } catch (error) {
       console.error("Error fetching health data:", error);
+    } finally {
+      setLoading(false);
     }
-    
-    await uploadGarminData(garminData);
   };
 
   const uploadGarminData = async (garminData: GarminData) => {
@@ -1594,6 +1597,7 @@ const HomeScreen = () => {
   }, [dataSource]);
 
   const initializeApp = async () => {
+    setLoading(true);
     try {
       if (await SecureStore.getItemAsync('garmin_email') && await SecureStore.getItemAsync('garmin_password')) {
         setDataSource('garmin');
@@ -1751,6 +1755,8 @@ const HomeScreen = () => {
         console.error('Initialization error:', error);
       setHealthKitAvailable(false);
         setInitError(error instanceof Error ? error.message : ERROR_MESSAGES.INIT);
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -3681,6 +3687,13 @@ const HomeScreen = () => {
               onPress={handlePersonalInfoButtonPress}
             >
               <Text style={styles.buttonText}>Persönliche Informationen</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.button, { backgroundColor: '#4CAF50' }]}
+              onPress={() => uploadHistoricalData(db, getOrCreateDeviceId, setLoading)}
+            >
+              <Text style={styles.buttonText}>Upload 3 Months Data</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
