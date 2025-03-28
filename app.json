@@ -1,11 +1,21 @@
 {
   "expo": {
-    "extra": {
-      "eas": {
-        "projectId": "c7f67f65-f1a7-49fd-814e-19167cdfef2f"
-      }
+    "name": "HRV App",
+    "slug": "my-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
     },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
+      "supportsTablet": true,
       "bundleIdentifier": "com.ananananas.myapp",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
@@ -25,9 +35,25 @@
         "com.apple.developer.healthkit.background-delivery": true
       }
     },
-    "owner": "ananananas",
     "android": {
-      "package": "com.ananananas.myapp"
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.ananananas.myapp",
+      "permissions": [
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "c7f67f65-f1a7-49fd-814e-19167cdfef2f"
+      }
     },
     "plugins": [
       "expo-router"
