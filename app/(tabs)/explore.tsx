@@ -3691,7 +3691,45 @@ const HomeScreen = () => {
             
             <TouchableOpacity 
               style={[styles.button, { backgroundColor: '#4CAF50' }]}
-              onPress={() => uploadHistoricalData(db, getOrCreateDeviceId, setLoading)}
+              onPress={() => uploadHistoricalData(
+                db, 
+                getOrCreateDeviceId, 
+                setLoading,
+                dataSource,
+                async (email, password, date) => {
+                  // Create a function to fetch Garmin data for a specific date
+                  try {
+                    const requestBody = { 
+                      email: email, 
+                      password: password, 
+                      date: date 
+                    };
+                    
+                    const API_URL = Constants.expoConfig?.extra?.apiUrl || 'https://hrvapp-backend.onrender.com';
+                    const response = await fetch(`${API_URL}/all_data`, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                      },
+                      body: JSON.stringify(requestBody),
+                    });
+                    
+                    if (!response.ok) {
+                      throw new Error(`Server error: ${response.status}`);
+                    }
+                    
+                    return await response.json();
+                  } catch (error) {
+                    console.error(`Error fetching Garmin data for ${date}:`, error);
+                    throw error;
+                  }
+                },
+                healthKitAvailable,
+                {
+                  email: email || await SecureStore.getItemAsync("garmin_email") || "",
+                  password: password || await SecureStore.getItemAsync("garmin_password") || ""
+                }
+              )}
             >
               <Text style={styles.buttonText}>Upload 3 Months Data</Text>
             </TouchableOpacity>
