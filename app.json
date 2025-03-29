@@ -53,7 +53,8 @@
     "extra": {
       "eas": {
         "projectId": "c7f67f65-f1a7-49fd-814e-19167cdfef2f"
-      }
+      },
+      "apiUrl": "https://dodo-holy-primarily.ngrok-free.app"
     },
     "plugins": [
       "expo-router"

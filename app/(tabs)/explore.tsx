@@ -3603,7 +3603,7 @@ const HomeScreen = () => {
   
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Gestrige Aktivitäten</Text>
+            <Text style={styles.sectionTitle}>Training</Text>
             {garminData?.activity?.daily_activities ? (
               garminData.activity.daily_activities.length > 0 ? (
               garminData.activity.daily_activities.map((activity, index) => (
@@ -3691,45 +3691,54 @@ const HomeScreen = () => {
             
             <TouchableOpacity 
               style={[styles.button, { backgroundColor: '#4CAF50' }]}
-              onPress={() => uploadHistoricalData(
-                db, 
-                getOrCreateDeviceId, 
-                setLoading,
-                dataSource,
-                async (email, password, date) => {
-                  // Create a function to fetch Garmin data for a specific date
-                  try {
-                    const requestBody = { 
-                      email: email, 
-                      password: password, 
-                      date: date 
-                    };
-                    
-                    const API_URL = Constants.expoConfig?.extra?.apiUrl || 'https://hrvapp-backend.onrender.com';
-                    const response = await fetch(`${API_URL}/all_data`, {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json',
-                      },
-                      body: JSON.stringify(requestBody),
-                    });
-                    
-                    if (!response.ok) {
-                      throw new Error(`Server error: ${response.status}`);
+              onPress={async () => {
+                // Retrieve credentials before the function call
+                const storedEmail = email || await SecureStore.getItemAsync("garmin_email") || "";
+                const storedPassword = password || await SecureStore.getItemAsync("garmin_password") || "";
+                
+                uploadHistoricalData(
+                  db, 
+                  getOrCreateDeviceId, 
+                  setLoading,
+                  dataSource,
+                  async (email, password, date) => {
+                    // Create a function to fetch Garmin data for a specific date
+                    try {
+                      console.log(`Fetching historical data for date: ${date}`);
+                      const requestBody = { 
+                        email: email, 
+                        password: password, 
+                        date: date 
+                      };
+                      
+                      const API_URL = Constants.expoConfig?.extra?.apiUrl || 'https://dodo-holy-primarily.ngrok-free.app';
+                      const response = await fetch(`${API_URL}/all_data`, {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(requestBody),
+                      });
+                      
+                      if (!response.ok) {
+                        throw new Error(`Server error: ${response.status}`);
+                      }
+                      
+                      const data = await response.json();
+                      console.log(`Successfully received data for ${date}`);
+                      return data;
+                    } catch (error) {
+                      console.error(`Error fetching Garmin data for ${date}:`, error);
+                      throw error;
                     }
-                    
-                    return await response.json();
-                  } catch (error) {
-                    console.error(`Error fetching Garmin data for ${date}:`, error);
-                    throw error;
+                  },
+                  healthKitAvailable,
+                  {
+                    email: storedEmail,
+                    password: storedPassword
                   }
-                },
-                healthKitAvailable,
-                {
-                  email: email || await SecureStore.getItemAsync("garmin_email") || "",
-                  password: password || await SecureStore.getItemAsync("garmin_password") || ""
-                }
-              )}
+                )
+              }}
             >
               <Text style={styles.buttonText}>Upload 3 Months Data</Text>
             </TouchableOpacity>

@@ -71,6 +71,7 @@ export const uploadHistoricalData = async (
                   if (dataSource === 'garmin' && fetchGarminDataForDate && garminCredentials) {
                     // For Garmin, call the API for this specific date
                     try {
+                      console.log(`Fetching Garmin data for ${dateString}...`);
                       healthData = await fetchGarminDataForDate(
                         garminCredentials.email,
                         garminCredentials.password,
