@@ -3027,13 +3027,13 @@ const HomeScreen = () => {
                   style={[styles.button, styles.submitButton]} 
                   onPress={handleSubmit}
                 >
-                  <Text style={styles.buttonText}>Absenden</Text>
+                  <Text style={styles.buttonText}>Submit</Text>
                 </TouchableOpacity>
                 <TouchableOpacity 
                   style={[styles.button, styles.cancelButton]} 
                   onPress={handleCancel}
                 >
-                  <Text style={styles.buttonText}>Abbrechen</Text>
+                  <Text style={styles.buttonText}>Cancel</Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>
@@ -3491,67 +3491,49 @@ const HomeScreen = () => {
 
           
 
-          {/* Sleep Section */}
+          {/* Sleep Analysis Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Schlafanalyse</Text>
-            
-            {/* Sleep Summary */}
-            {garminData?.sleep?.summary ? (
+            <Text style={styles.sectionTitle}>Sleep Analysis</Text>
+            {garminData?.sleep ? (
               <>
                 <View style={styles.sleepSummary}>
-                  <Text style={styles.sleepTime}>
-                    {garminData.sleep.summary.sleep_start ? 
-                      new Date(garminData.sleep.summary.sleep_start).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) :
-                      'N/A'} 
-                    {' - '}
-                    {garminData.sleep.summary.sleep_end ? 
-                      new Date(garminData.sleep.summary.sleep_end).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) :
-                      'N/A'}
-                  </Text>
-                  
                   <View style={styles.row}>
                     <Text style={styles.label}>Total Sleep:</Text>
                     <Text style={styles.value}>
                       {formatDuration(garminData.sleep.summary.total_sleep_seconds)}
                     </Text>
                   </View>
-                  
                   <View style={styles.row}>
                     <Text style={styles.label}>Deep Sleep:</Text>
                     <Text style={styles.value}>
                       {formatDuration(garminData.sleep.summary.deep_sleep_seconds)}
                     </Text>
                   </View>
-                  
                   <View style={styles.row}>
                     <Text style={styles.label}>Light Sleep:</Text>
                     <Text style={styles.value}>
                       {formatDuration(garminData.sleep.summary.light_sleep_seconds)}
                     </Text>
                   </View>
-                  
                   <View style={styles.row}>
                     <Text style={styles.label}>REM Sleep:</Text>
                     <Text style={styles.value}>
                       {formatDuration(garminData.sleep.summary.rem_sleep_seconds)}
                     </Text>
                   </View>
-                  
                   <View style={styles.row}>
-                    <Text style={styles.label}>Awake Time:</Text>
+                    <Text style={styles.label}>Awake:</Text>
                     <Text style={styles.value}>
                       {formatDuration(garminData.sleep.summary.awake_seconds)}
                     </Text>
                   </View>
-
                   <View style={styles.row}>
                     <Text style={styles.label}>Sleep Score:</Text>
                     <Text style={styles.value}>
-                      {garminData.sleep.summary.sleep_score || 'N/A'}
+                      {garminData.sleep.summary.sleep_score}
                     </Text>
                   </View>
                 </View>
-                
               </>
             ) : (
               <Text style={styles.noData}>No sleep data available</Text>
@@ -3559,48 +3541,45 @@ const HomeScreen = () => {
           </View>
 
           {/* Activity Section */}
-          {garminData.activity && (
-            <View style={styles.dataContainer}>
-              <Text style={styles.sectionTitle}>Aktivität</Text>
-              <View style={styles.dataRow}>
-                <Text style={styles.dataLabel}>Schritte:</Text>
-                <Text style={styles.dataValue}>{garminData.activity.steps || 'N/A'}</Text>
-              </View>
-              <View style={styles.dataRow}>
-                <Text style={styles.dataLabel}>Kalorien:</Text>
-                <Text style={styles.dataValue}>{garminData.activity.calories_burned || 'N/A'}</Text>
-              </View>
-              <View style={styles.dataRow}>
-                <Text style={styles.dataLabel}>Aktive Minuten:</Text>
-                <Text style={styles.dataValue}>{garminData.activity.active_minutes || 'N/A'}</Text>
-              </View>
-              <View style={styles.dataRow}>
-                <Text style={styles.dataLabel}>Distanz:</Text>
-                <Text style={styles.dataValue}>{garminData.activity.distance_km?.toFixed(1) || 'N/A'} km</Text>
-              </View>
-              <View style={styles.dataRow}>
-                <Text style={styles.dataLabel}>Achtsamkeitsminuten:</Text>
-                <Text style={styles.dataValue}>{garminData.activity.mindful_minutes !== undefined && garminData.activity.mindful_minutes !== null ? garminData.activity.mindful_minutes : 'N/A'}</Text>
-              </View>
-              <View style={styles.row}>
-                <Text style={styles.label}>VO2 Max:</Text>
-                <Text style={styles.value}>
-                  {garminData.activity.vo2_max > 0 ? 
-                    `${garminData.activity.vo2_max.toFixed(1)} (${garminData.activity.vo2_max_status})` : 
-                    'N/A'}
-                </Text>
-              </View>
-              {garminData.activity.vo2_max > 0 && (
-                <View style={styles.subRow}>
-                  <Text style={styles.subText}>
-                    Measured on: {garminData.activity.vo2_max_date}
-                  </Text>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Activity</Text>
+            {garminData?.activity ? (
+              <>
+                <View style={styles.sleepSummary}>
+                  <View style={styles.row}>
+                    <Text style={styles.label}>Steps:</Text>
+                    <Text style={styles.value}>{formatNumber(garminData.activity.steps)}</Text>
+                  </View>
+                  <View style={styles.row}>
+                    <Text style={styles.label}>Calories:</Text>
+                    <Text style={styles.value}>{formatNumber(garminData.activity.calories_burned)} kcal</Text>
+                  </View>
+                  <View style={styles.row}>
+                    <Text style={styles.label}>Active Minutes:</Text>
+                    <Text style={styles.value}>{formatNumber(garminData.activity.active_minutes)}</Text>
+                  </View>
+                  <View style={styles.row}>
+                    <Text style={styles.label}>Distance:</Text>
+                    <Text style={styles.value}>{garminData.activity.distance_km.toFixed(2)} km</Text>
+                  </View>
+                  <View style={styles.row}>
+                    <Text style={styles.label}>Floors Climbed:</Text>
+                    <Text style={styles.value}>{formatNumber(garminData.activity.floors_climbed)}</Text>
+                  </View>
+                  {garminData.activity.vo2_max > 0 && (
+                    <View style={styles.row}>
+                      <Text style={styles.label}>VO2 Max:</Text>
+                      <Text style={styles.value}>
+                        {garminData.activity.vo2_max} ({garminData.activity.vo2_max_status})
+                      </Text>
+                    </View>
+                  )}
                 </View>
-              )}
-            </View>
-          )}
-
-  
+              </>
+            ) : (
+              <Text style={styles.noData}>No activity data available</Text>
+            )}
+          </View>
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Training</Text>
@@ -3622,7 +3601,7 @@ const HomeScreen = () => {
 
           {/* New HRV Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Herzfrequenzvariabilität</Text>
+            <Text style={styles.sectionTitle}>Heart Rate Variability</Text>
             {garminData?.hrv ? (
               <>
                 <View style={styles.hrvSummary}>
@@ -3679,14 +3658,14 @@ const HomeScreen = () => {
               style={styles.button}
               onPress={handlePssButtonPress}
             >
-              <Text style={styles.buttonText}>PSS Umfrage</Text>
+              <Text style={styles.buttonText}>PSS Survey</Text>
             </TouchableOpacity>
 
             <TouchableOpacity 
               style={styles.button}
               onPress={handlePersonalInfoButtonPress}
             >
-              <Text style={styles.buttonText}>Persönliche Informationen</Text>
+              <Text style={styles.buttonText}>Personal Information</Text>
             </TouchableOpacity>
             
             <TouchableOpacity 
@@ -3743,6 +3722,10 @@ const HomeScreen = () => {
               <Text style={styles.buttonText}>Upload 3 Months Data</Text>
             </TouchableOpacity>
           </View>
+
+          {isLoading && (
+            <ActivityIndicator size="large" color="#007AFF" style={{marginVertical: 20}} />
+          )}
         </ScrollView>
       )}
 
@@ -3792,7 +3775,7 @@ const HomeScreen = () => {
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>PSS Umfrage</Text>
+              <Text style={styles.modalTitle}>PSS Survey</Text>
               <TouchableOpacity onPress={() => setPssModalVisible(false)}>
                 <Text style={styles.closeButton}>✕</Text>
               </TouchableOpacity>
