@@ -9,8 +9,8 @@ import React from "react";
 const TrainingScreen = () => {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Starte dein Trainnig</Text>
-      <Text style={styles.instruction}>Folge den Anweisungen um dein Training zu beginnen!</Text>
+      <Text style={styles.title}>Start your Training</Text>
+      <Text style={styles.instruction}>Follow the instructions on the screen to start your training!</Text>
     </View>
   );
 };

@@ -11,134 +11,144 @@ export const uploadHistoricalData = async (
   fetchGarminDataForDate?: (email: string, password: string, date: string) => Promise<any>,
   healthKitAvailable?: boolean,
   garminCredentials?: { email: string, password: string }
-) => {
+): Promise<boolean> => {
   if (!db) {
     console.error('Firebase not initialized');
     Alert.alert('Error', 'Database connection not available');
-    return;
+    return false;
   }
   
   setLoading(true);
   
-  try {
-    const now = new Date();
-    const threeMonthsAgo = new Date();
-    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-    threeMonthsAgo.setHours(0, 0, 0, 0);
-    
-    if (dataSource === 'garmin' && (!garminCredentials || !garminCredentials.email || !garminCredentials.password)) {
-      Alert.alert('Error', 'Garmin credentials are required for Garmin data source');
-      setLoading(false);
-      return;
-    }
-    
-    if (dataSource === 'apple' && !healthKitAvailable) {
-      Alert.alert('Error', 'Apple HealthKit is not available');
-      setLoading(false);
-      return;
-    }
-    
-    Alert.alert(
-      'Upload Historical Data',
-      `This will retrieve and upload health data from the last 3 months (${threeMonthsAgo.toLocaleDateString()} to today) to Firebase. Continue?`,
-      [
-        { text: 'Cancel', style: 'cancel', onPress: () => setLoading(false) },
-        { 
-          text: 'Continue', 
-          onPress: async () => {
-            try {
-              let successCount = 0;
-              let errorCount = 0;
-              const totalDays = Math.floor((now.getTime() - threeMonthsAgo.getTime()) / (1000 * 60 * 60 * 24));
-              
-              for (let i = 0; i < totalDays; i++) {
-                const currentDate = new Date(threeMonthsAgo);
-                currentDate.setDate(threeMonthsAgo.getDate() + i);
+  return new Promise<boolean>((resolve) => {
+    try {
+      const now = new Date();
+      const threeMonthsAgo = new Date();
+      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+      threeMonthsAgo.setHours(0, 0, 0, 0);
+      
+      if (dataSource === 'garmin' && (!garminCredentials || !garminCredentials.email || !garminCredentials.password)) {
+        Alert.alert('Error', 'Garmin credentials are required for Garmin data source');
+        setLoading(false);
+        resolve(false);
+        return;
+      }
+      
+      if (dataSource === 'apple' && !healthKitAvailable) {
+        Alert.alert('Error', 'Apple HealthKit is not available');
+        setLoading(false);
+        resolve(false);
+        return;
+      }
+      
+      Alert.alert(
+        'Upload Historical Data',
+        `This will retrieve and upload health data from the last 3 months (${threeMonthsAgo.toLocaleDateString()} to today) to Firebase. Continue?`,
+        [
+          { text: 'Cancel', style: 'cancel', onPress: () => {
+            setLoading(false);
+            resolve(false);
+          }},
+          { 
+            text: 'Continue', 
+            onPress: async () => {
+              try {
+                let successCount = 0;
+                let errorCount = 0;
+                const totalDays = Math.floor((now.getTime() - threeMonthsAgo.getTime()) / (1000 * 60 * 60 * 24));
                 
-                try {
-                  // Format date as YYYY-MM-DD
-                  const dateString = currentDate.toISOString().split('T')[0];
+                for (let i = 0; i < totalDays; i++) {
+                  const currentDate = new Date(threeMonthsAgo);
+                  currentDate.setDate(threeMonthsAgo.getDate() + i);
                   
-                  // Skip if it's today's date
-                  if (dateString === now.toISOString().split('T')[0]) continue;
-                  
-                  // Get device ID
-                  const deviceId = await getDeviceId();
-                  
-                  // Retrieve actual health data for this date
-                  let healthData;
-                  
-                  if (dataSource === 'garmin' && fetchGarminDataForDate && garminCredentials) {
-                    // For Garmin, call the API for this specific date
-                    try {
-                      console.log(`Fetching Garmin data for ${dateString}...`);
-                      healthData = await fetchGarminDataForDate(
-                        garminCredentials.email,
-                        garminCredentials.password,
-                        dateString
-                      );
-                    } catch (error) {
-                      console.error(`Error fetching Garmin data for ${dateString}:`, error);
-                      // Use placeholder data if there's an error
+                  try {
+                    // Format date as YYYY-MM-DD
+                    const dateString = currentDate.toISOString().split('T')[0];
+                    
+                    // Skip if it's today's date
+                    if (dateString === now.toISOString().split('T')[0]) continue;
+                    
+                    // Get device ID
+                    const deviceId = await getDeviceId();
+                    
+                    // Retrieve actual health data for this date
+                    let healthData;
+                    
+                    if (dataSource === 'garmin' && fetchGarminDataForDate && garminCredentials) {
+                      // For Garmin, call the API for this specific date
+                      try {
+                        console.log(`Fetching Garmin data for ${dateString}...`);
+                        healthData = await fetchGarminDataForDate(
+                          garminCredentials.email,
+                          garminCredentials.password,
+                          dateString
+                        );
+                      } catch (error) {
+                        console.error(`Error fetching Garmin data for ${dateString}:`, error);
+                        // Use placeholder data if there's an error
+                        healthData = createPlaceholderData(dateString);
+                      }
+                    } else if (dataSource === 'apple' && healthKitAvailable) {
+                      // For Apple HealthKit, query data for this specific date
+                      try {
+                        healthData = await fetchHealthKitDataForDate(currentDate);
+                      } catch (error) {
+                        console.error(`Error fetching HealthKit data for ${dateString}:`, error);
+                        // Use placeholder data if there's an error
+                        healthData = createPlaceholderData(dateString);
+                      }
+                    } else {
+                      // Fallback to placeholder data
                       healthData = createPlaceholderData(dateString);
                     }
-                  } else if (dataSource === 'apple' && healthKitAvailable) {
-                    // For Apple HealthKit, query data for this specific date
-                    try {
-                      healthData = await fetchHealthKitDataForDate(currentDate);
-                    } catch (error) {
-                      console.error(`Error fetching HealthKit data for ${dateString}:`, error);
-                      // Use placeholder data if there's an error
-                      healthData = createPlaceholderData(dateString);
-                    }
-                  } else {
-                    // Fallback to placeholder data
-                    healthData = createPlaceholderData(dateString);
+                    
+                    // Format data for upload - matches the structure of daily uploads
+                    const dataToUpload = {
+                      ...healthData,
+                      timestamp: new Date(),
+                      deviceId: deviceId,
+                      uploadDate: dateString
+                    };
+                    
+                    // Upload to device-specific collection with the date as document ID
+                    const deviceGarminRef = doc(db, `devices/${deviceId}/garminData`, dateString);
+                    await setDoc(deviceGarminRef, dataToUpload);
+                    
+                    // Upload to main collection
+                    const mainGarminRef = doc(collection(db, 'garminData'), `${deviceId}_${dateString}`);
+                    await setDoc(mainGarminRef, dataToUpload);
+                    
+                    successCount++;
+                  } catch (dayError) {
+                    console.error(`Error processing data for ${currentDate.toLocaleDateString()}:`, dayError);
+                    errorCount++;
                   }
-                  
-                  // Format data for upload - matches the structure of daily uploads
-                  const dataToUpload = {
-                    ...healthData,
-                    timestamp: new Date(),
-                    deviceId: deviceId,
-                    uploadDate: dateString
-                  };
-                  
-                  // Upload to device-specific collection with the date as document ID
-                  const deviceGarminRef = doc(db, `devices/${deviceId}/garminData`, dateString);
-                  await setDoc(deviceGarminRef, dataToUpload);
-                  
-                  // Upload to main collection
-                  const mainGarminRef = doc(collection(db, 'garminData'), `${deviceId}_${dateString}`);
-                  await setDoc(mainGarminRef, dataToUpload);
-                  
-                  successCount++;
-                } catch (dayError) {
-                  console.error(`Error processing data for ${currentDate.toLocaleDateString()}:`, dayError);
-                  errorCount++;
                 }
+                
+                Alert.alert(
+                  'Upload Complete',
+                  `Successfully uploaded data for ${successCount} days.\n${errorCount > 0 ? `Failed for ${errorCount} days.` : ''}`,
+                  [{ text: 'OK' }]
+                );
+                setLoading(false);
+                resolve(successCount > 0); // Return true if at least one day was successful
+              } catch (e) {
+                console.error('Error in historical data upload:', e);
+                Alert.alert('Error', 'Failed to upload historical data');
+                setLoading(false);
+                resolve(false);
               }
-              
-              Alert.alert(
-                'Upload Complete',
-                `Successfully uploaded data for ${successCount} days.\n${errorCount > 0 ? `Failed for ${errorCount} days.` : ''}`,
-                [{ text: 'OK' }]
-              );
-            } catch (e) {
-              console.error('Error in historical data upload:', e);
-              Alert.alert('Error', 'Failed to upload historical data');
-            } finally {
-              setLoading(false);
             }
           }
-        }
-      ]
-    );
-  } catch (error) {
-    console.error('Error setting up historical data upload:', error);
-    Alert.alert('Error', 'Could not setup historical data upload');
-    setLoading(false);
-  }
+        ]
+      );
+    } catch (error) {
+      console.error('Error setting up historical data upload:', error);
+      Alert.alert('Error', 'Could not setup historical data upload');
+      setLoading(false);
+      resolve(false);
+    }
+  });
 };
 
 // Function to create placeholder data for a specific date

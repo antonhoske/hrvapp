@@ -1,6 +1,6 @@
-import { uploadHistoricalData } from "../utils/historicalUpload";
+import { uploadHistoricalData } from "@/utils/historicalUpload";
 import { StyleSheet, View, Text, ActivityIndicator, TouchableOpacity, Modal, TextInput, FlatList, Button, ScrollView, Alert, Platform } from "react-native";
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState } from "react";
 import * as SecureStore from "expo-secure-store";
 import { useRouter } from "expo-router";
 import { getFirestore, collection, addDoc, Firestore } from "firebase/firestore";
@@ -17,8 +17,6 @@ import AppleHealthKit, {
 import { doc, setDoc } from "firebase/firestore";  
 import { getAuth, initializeAuth, Auth } from "firebase/auth";
 import Constants from 'expo-constants';
-import { AppState } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Add type declarations for Apple HealthKit
 declare module 'react-native-health' {
@@ -587,17 +585,6 @@ const styles = StyleSheet.create({
   selectedOptionText: {
     color: '#007AFF',
   },
-  buttonWithCheckbox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkmark: {
-    marginLeft: 8,
-    fontSize: 18,
-    color: '#fff',
-    fontWeight: 'bold',
-  },
 });
 
 // Add this new function to handle device ID generation and storage
@@ -646,8 +633,6 @@ const HomeScreen = () => {
     allergies: "" as string,
     smoker: "" as string,
     alcohol_consumption: "" as string,
-    firstname: "" as string, // Add first name field
-    lastname: "" as string,  // Add last name field
   });
   const [garminData, setGarminData] = useState<GarminData>({
     stress: null,
@@ -663,24 +648,20 @@ const HomeScreen = () => {
   const [isModalTransitioning, setIsModalTransitioning] = useState(false);
   const [activeModal, setActiveModal] = useState<'garmin' | 'pss' | 'personal' | null>(null);
   const [isAutoFilling, setIsAutoFilling] = useState(false);
-  const [surveySubmitted, setSurveySubmitted] = useState(false);
-  const [lastSurveyDate, setLastSurveyDate] = useState<string | null>(null);
-  const [personalInfoSubmitted, setPersonalInfoSubmitted] = useState(false);
-  const [historyDataUploaded, setHistoryDataUploaded] = useState(false);
 
   // PSS questions
   const questions = [
-    "How stressed do you feel currently?",
-    "Have you had sleep problems recently?",
-    "Do you often feel overwhelmed?"
+    "Wie gestresst fühlst du dich derzeit?",
+    "Hast du in letzter Zeit Schlafprobleme?",
+    "Fühlst du dich oft überfordert?"
   ];
 
   const likertOptions = [
-    { value: 1, label: "Not at all" },
-    { value: 2, label: "Slightly" },
-    { value: 3, label: "Moderately" },
-    { value: 4, label: "Strongly" },
-    { value: 5, label: "Very strongly" }
+    { value: 1, label: "Überhaupt nicht" },
+    { value: 2, label: "Etwas" },
+    { value: 3, label: "Mäßig" },
+    { value: 4, label: "Stark" },
+    { value: 5, label: "Sehr stark" }
   ];
 
   // Add a more sophisticated modal manager
@@ -1604,47 +1585,9 @@ const HomeScreen = () => {
     fetchGarminData(email, password);
   };
 
-  // Add this function to check if the survey was submitted today
-  const checkSurveyDate = useCallback(async () => {
-    try {
-      // Get stored last survey date from AsyncStorage
-      const storedDate = await AsyncStorage.getItem('lastSurveyDate');
-      
-      // Update state with stored date
-      if (storedDate) {
-        setLastSurveyDate(storedDate);
-      }
-      
-      // Get today's date in YYYY-MM-DD format
-      const today = new Date().toISOString().split('T')[0];
-      
-      // If stored date is not today, reset the survey submitted state
-      if (storedDate !== today) {
-        setSurveySubmitted(false);
-      } else {
-        setSurveySubmitted(true);
-      }
-    } catch (error) {
-      console.error('Error checking survey date:', error);
-    }
-  }, []);
-
-  // Add this to the existing useEffect for app initialization
   useEffect(() => {
     initializeApp();
-    checkSurveyDate(); // Check survey date on app load
-    
-    // Also check when app comes to foreground
-    const subscription = AppState.addEventListener('change', (nextAppState) => {
-      if (nextAppState === 'active') {
-        checkSurveyDate();
-      }
-    });
-    
-    return () => {
-      subscription.remove();
-    };
-  }, [initializeApp, checkSurveyDate]);
+  }, []);
 
   useEffect(() => {
     if (dataSource && !isInitialized) {
@@ -2031,47 +1974,42 @@ const HomeScreen = () => {
 
   const submitSurvey = async () => {
     if (!db) {
+      console.error('Firebase not initialized');
       Alert.alert('Error', 'Database connection not available');
       return;
     }
-    
+
+    const firestore = db as Firestore;
+
     try {
       if (responses.some(response => response === 0)) {
-        Alert.alert("Error", "Please answer all questions");
+        alert("Bitte beantworten Sie alle Fragen");
         return;
       }
 
       // Get or create device ID
-      const deviceId = await getOrCreateDeviceId();
-      
-      // Get today's date in YYYY-MM-DD format
-      const today = new Date().toISOString().split('T')[0];
-      
-      // Prepare data
-      const data = {
+      const currentDeviceId = await getOrCreateDeviceId();
+
+      const surveyData = {
         responses,
         timestamp: new Date(),
-        deviceId,
-        date: today // Store the date with the submission
+        deviceId: currentDeviceId,
+        stressData: stressData ? {
+          hrv: stressData.hrv,
+          timestamp: stressData.timestamp,
+          source: healthKitAvailable ? "HealthKit" : "Garmin"
+        } : null
       };
+
+      const surveyCollection = collection(firestore, "pss_surveys");
+      await addDoc(surveyCollection, surveyData);
       
-      // Submit to Firestore
-      const pssCollection = collection(db, "pss_responses");
-      await addDoc(pssCollection, data);
-      
-      // Reset and close
+      alert("Umfrage erfolgreich gesendet!");
       setResponses([0, 0, 0]);
       setPssModalVisible(false);
-      setSurveySubmitted(true); // Mark survey as submitted
-      setLastSurveyDate(today); // Store the submission date in state
-      
-      // Also persist to AsyncStorage
-      await AsyncStorage.setItem('lastSurveyDate', today);
-
-      Alert.alert("Success", "Survey submitted successfully!");
     } catch (error) {
-      console.error("Error sending survey:", error);
-      Alert.alert("Error", "Failed to send survey. Please try again later.");
+      console.error("Fehler beim Senden der Umfrage:", error);
+      alert("Fehler beim Senden der Umfrage. Bitte versuchen Sie es später erneut.");
     }
   };
 
@@ -2086,13 +2024,13 @@ const HomeScreen = () => {
       // Enhanced validation with more debugging information
       if (!dataToSubmit.age || dataToSubmit.age === null || dataToSubmit.age === undefined) {
         console.error("Age validation failed. Age is:", dataToSubmit.age);
-        Alert.alert("Error", "Please fill in at least age and gender");
+        Alert.alert("Fehler", "Bitte füllen Sie mindestens Alter und Geschlecht aus");
         return false;
       }
       
       if (!dataToSubmit.gender || dataToSubmit.gender === "" || dataToSubmit.gender === null) {
         console.error("Gender validation failed. Gender is:", dataToSubmit.gender);
-        Alert.alert("Error", "Please fill in at least age and gender");
+        Alert.alert("Fehler", "Bitte füllen Sie mindestens Alter und Geschlecht aus");
         return false;
       }
 
@@ -2113,7 +2051,7 @@ const HomeScreen = () => {
       const personalInfoCollection = collection(firestore, "personal_info");
       await addDoc(personalInfoCollection, finalData);
 
-      Alert.alert("Success", "Personal information saved successfully!");
+      Alert.alert("Erfolg", "Persönliche Informationen erfolgreich gespeichert!");
       
       // Only reset the form data if we're submitting the main state
       if (dataToSubmit === personalInfo) {
@@ -2129,18 +2067,14 @@ const HomeScreen = () => {
           allergies: "" as string,
           smoker: "" as string,
           alcohol_consumption: "" as string,
-          firstname: "" as string, // Add first name field
-          lastname: "" as string,  // Add last name field
         });
       }
-      
-      setPersonalInfoSubmitted(true); // Mark as submitted
       
       // Return success - modal visibility handled by caller
       return true;
     } catch (error) {
-      console.error("Error saving personal information:", error);
-      Alert.alert("Error", "There was a problem saving the data.");
+      console.error("Fehler beim Speichern der persönlichen Informationen:", error);
+      Alert.alert("Fehler", "Es gab ein Problem beim Speichern der Daten.");
       return false;
     }
   };
@@ -2194,27 +2128,27 @@ const HomeScreen = () => {
     // Gender selection - moved to top level for better visibility
     const [showGenderOptions, setShowGenderOptions] = useState(false);
     const genderOptions = [
-      { label: "Male", value: "male" },
-      { label: "Female", value: "female" },
-      { label: "Diverse", value: "diverse" }
+      { label: "Männlich", value: "male" },
+      { label: "Weiblich", value: "female" },
+      { label: "Divers", value: "diverse" }
     ];
     
     // Smoker selection
     const [showSmokerOptions, setShowSmokerOptions] = useState(false);
     const smokerOptions = [
-      { label: "Yes", value: "yes" },
-      { label: "No", value: "no" },
-      { label: "Occasional", value: "occasional" }
+      { label: "Ja", value: "yes" },
+      { label: "Nein", value: "no" },
+      { label: "Gelegentlich", value: "occasional" }
     ];
     
     // Alcohol consumption selection
     const [showAlcoholOptions, setShowAlcoholOptions] = useState(false);
     const alcoholOptions = [
-      { label: "Never", value: "never" },
-      { label: "Rarely", value: "rarely" },
-      { label: "Occasionally", value: "occasionally" },
-      { label: "Regularly", value: "regularly" },
-      { label: "Daily", value: "daily" }
+      { label: "Nie", value: "never" },
+      { label: "Selten", value: "rarely" },
+      { label: "Gelegentlich", value: "occasionally" },
+      { label: "Regelmäßig", value: "regularly" },
+      { label: "Täglich", value: "daily" }
     ];
     
     // Store local copies of relevant fields with direct initialization
@@ -2314,7 +2248,7 @@ const HomeScreen = () => {
       // Basic validation
       if (!localPersonalInfo.age || !localPersonalInfo.gender) {
         
-        Alert.alert('Error', 'Please enter at least age and gender.');
+        Alert.alert('Fehler', 'Bitte geben Sie mindestens Alter und Geschlecht an.');
         return; // Return early without closing the modal
       }
 
@@ -2339,7 +2273,7 @@ const HomeScreen = () => {
         }
       } catch (error) {
         console.error("Error during submission:", error);
-        Alert.alert('Error', 'There was a problem saving the data. Please try again.');
+        Alert.alert('Fehler', 'Es gab ein Problem beim Speichern. Bitte versuchen Sie es erneut.');
       }
     };
 
@@ -2375,170 +2309,6 @@ const HomeScreen = () => {
             
             console.log("📆 Date range:", threeMonthsAgo.toISOString(), "to", new Date().toISOString());
             
-            // First fetch basic user profile information
-            console.log("👤 Fetching user data from HealthKit...");
-            
-            // 1. Get biological sex
-            try {
-              const biologicalSex = await new Promise<any>((resolve, reject) => {
-                if (typeof AppleHealthKit.getBiologicalSex !== 'function') {
-                  console.error("❌ getBiologicalSex function not available");
-                  resolve(null);
-                  return;
-                }
-                
-                AppleHealthKit.getBiologicalSex({}, (err, result) => {
-                  if (err) {
-                    console.error('❌ Error fetching biological sex:', err);
-                    resolve(null);
-                  } else {
-                    console.log(`👤 Biological sex data:`, result);
-                    resolve(result);
-                  }
-                });
-              });
-              
-              if (biologicalSex && biologicalSex.value) {
-                // Map HealthKit sex values to our format
-                let genderValue = "";
-                if (biologicalSex.value === 'male') {
-                  genderValue = "male";
-                } else if (biologicalSex.value === 'female') {
-                  genderValue = "female";
-                } else if (biologicalSex.value === 'other') {
-                  genderValue = "diverse";
-                }
-                
-                if (genderValue) {
-                  console.log(`👤 Setting gender to: ${genderValue}`);
-                  updatedInfo.gender = genderValue;
-                  updatesMade = true;
-                  
-                  // Update the selected gender state to trigger UI update
-                  setSelectedGender(genderValue);
-                }
-              }
-            } catch (error) {
-              console.error("❌ Error getting biological sex:", error);
-            }
-            
-            // 2. Get date of birth for age calculation
-            try {
-              const dateOfBirth = await new Promise<any>((resolve, reject) => {
-                if (typeof AppleHealthKit.getDateOfBirth !== 'function') {
-                  console.error("❌ getDateOfBirth function not available");
-                  resolve(null);
-                  return;
-                }
-                
-                AppleHealthKit.getDateOfBirth({}, (err, result) => {
-                  if (err) {
-                    console.error('❌ Error fetching date of birth:', err);
-                    resolve(null);
-                  } else {
-                    console.log(`👤 Date of birth data:`, result);
-                    resolve(result);
-                  }
-                });
-              });
-              
-              if (dateOfBirth && dateOfBirth.value) {
-                const dob = new Date(dateOfBirth.value);
-                const today = new Date();
-                let age = today.getFullYear() - dob.getFullYear();
-                
-                // Adjust age if birthday hasn't occurred yet this year
-                const m = today.getMonth() - dob.getMonth();
-                if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
-                  age--;
-                }
-                
-                console.log(`👤 Calculated age: ${age}`);
-                updatedInfo.age = age;
-                updatesMade = true;
-              }
-            } catch (error) {
-              console.error("❌ Error getting date of birth:", error);
-            }
-            
-            // 3. Get latest height
-            try {
-              const heightData = await new Promise<any>((resolve, reject) => {
-                if (typeof AppleHealthKit.getHeightSamples !== 'function') {
-                  console.error("❌ getHeightSamples function not available");
-                  resolve(null);
-                  return;
-                }
-                
-                AppleHealthKit.getHeightSamples({
-                  unit: 'cm',
-                  ascending: false,
-                  limit: 1,
-                  startDate: options.startDate, // Add start date
-                  endDate: options.endDate      // Add end date
-                }, (err, results) => {
-                  if (err) {
-                    console.error('❌ Error fetching height data:', err);
-                    resolve(null);
-                  } else if (Array.isArray(results) && results.length > 0) {
-                    console.log(`👤 Height data:`, results[0]);
-                    resolve(results[0]);
-                  } else {
-                    console.log("❌ No height data available");
-                    resolve(null);
-                  }
-                });
-              });
-              
-              if (heightData && heightData.value) {
-                const height = Math.round(heightData.value);
-                console.log(`👤 Setting height to: ${height} cm`);
-                updatedInfo.height = height;
-                updatesMade = true;
-              }
-            } catch (error) {
-              console.error("❌ Error getting height:", error);
-            }
-            
-            // 4. Get latest weight
-            try {
-              const weightData = await new Promise<any>((resolve, reject) => {
-                if (typeof AppleHealthKit.getWeightSamples !== 'function') {
-                  console.error("❌ getWeightSamples function not available");
-                  resolve(null);
-                  return;
-                }
-                
-                AppleHealthKit.getWeightSamples({
-                  unit: 'kg',
-                  ascending: false,
-                  limit: 1,
-                  startDate: options.startDate, // Add start date
-                  endDate: options.endDate      // Add end date
-                }, (err, results) => {
-                  if (err) {
-                    console.error('❌ Error fetching weight data:', err);
-                    resolve(null);
-                  } else if (Array.isArray(results) && results.length > 0) {
-                    console.log(`👤 Weight data:`, results[0]);
-                    resolve(results[0]);
-                  } else {
-                    console.log("❌ No weight data available");
-                    resolve(null);
-                  }
-                });
-              });
-              
-              if (weightData && weightData.value) {
-                const weight = Math.round(weightData.value);
-                console.log(`👤 Setting weight to: ${weight} kg`);
-                updatedInfo.weight = weight;
-                updatesMade = true;
-              }
-            } catch (error) {
-              console.error("❌ Error getting weight:", error);
-            }
-
             // Fetch sleep data for last 3 months
             const sleepSamples = await new Promise<any[]>((resolve, reject) => {
               if (typeof AppleHealthKit.getSleepSamples !== 'function') {
@@ -2581,6 +2351,9 @@ const HomeScreen = () => {
                 }
               );
             });
+            
+            // Rest of the data fetching code...
+            // ... existing code ...
             
             // Initialize with proper structures
             let vo2MaxResults = { value: 0 };
@@ -2912,19 +2685,19 @@ const HomeScreen = () => {
                 setLocalPersonalInfo(prev => ({...prev}));
               }, 100);
             } else {
-              Alert.alert('Info', 'No data available for auto-fill');
+              Alert.alert('Info', 'Keine Daten für die automatische Befüllung verfügbar');
             }
           } catch (error) {
             console.error("❌ Error in HealthKit auto-fill:", error);
-            Alert.alert('Error', 'Problem querying HealthKit data: ' + (error instanceof Error ? error.message : String(error)));
+            Alert.alert('Fehler', 'Problem beim Abfragen der HealthKit-Daten: ' + (error instanceof Error ? error.message : String(error)));
           }
         } else {
           console.warn("⚠️ No valid data source selected or HealthKit not available");
-          Alert.alert('Info', 'Please select a data source first (Apple Health or Garmin)');
+          Alert.alert('Info', 'Bitte wählen Sie zuerst eine Datenquelle aus (Apple Health oder Garmin)');
         }
       } catch (error: any) {
         console.error("❌ Auto-fill error:", error);
-        Alert.alert('Error', 'There was a problem with auto-filling: ' + error.message);
+        Alert.alert('Fehler', 'Es gab ein Problem beim automatischen Ausfüllen: ' + error.message);
       } finally {
         // Reset loading state
         setIsAutoFilling(false);
@@ -2963,7 +2736,7 @@ const HomeScreen = () => {
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Personal Information</Text>
+              <Text style={styles.modalTitle}>Persönliche Informationen</Text>
               <TouchableOpacity onPress={handleCloseModal}>
                 <Text style={styles.closeButton}>✕</Text>
               </TouchableOpacity>
@@ -2975,14 +2748,14 @@ const HomeScreen = () => {
                   disabled={isAutoFilling}
                 >
                   <Text style={styles.buttonText}>
-                    {isAutoFilling ? 'Loading Data...' : 'Auto Fill'}
+                    {isAutoFilling ? 'Lade Daten...' : 'Automatisch ausfüllen'}
                   </Text>
                 </TouchableOpacity>
               </View>
             
             <ScrollView style={styles.modalFormContainer}>
               <View style={styles.formGroup}>
-                <Text style={styles.label}>Age</Text>
+                <Text style={styles.label}>Alter</Text>
                 <TextInput
                   style={styles.input}
                   value={localPersonalInfo.age ? String(localPersonalInfo.age) : ''}
@@ -2990,7 +2763,7 @@ const HomeScreen = () => {
                     const age = text === '' ? null : parseInt(text);
                     setLocalPersonalInfo(prev => ({...prev, age}));
                   }}
-                  placeholder="Age"
+                  placeholder="Alter"
                   keyboardType="number-pad"
                   returnKeyType="done"
                   blurOnSubmit={true}
@@ -2998,31 +2771,7 @@ const HomeScreen = () => {
               </View>
               
               <View style={styles.formGroup}>
-                <Text style={styles.label}>First Name</Text>
-                <TextInput
-                  style={styles.input}
-                  value={localPersonalInfo.firstname || ''}
-                  onChangeText={(text) => setLocalPersonalInfo(prev => ({...prev, firstname: text}))}
-                  placeholder="First Name"
-                  returnKeyType="done"
-                  blurOnSubmit={true}
-                />
-              </View>
-              
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Last Name</Text>
-                <TextInput
-                  style={styles.input}
-                  value={localPersonalInfo.lastname || ''}
-                  onChangeText={(text) => setLocalPersonalInfo(prev => ({...prev, lastname: text}))}
-                  placeholder="Last Name"
-                  returnKeyType="done"
-                  blurOnSubmit={true}
-                />
-              </View>
-              
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Gender</Text>
+                <Text style={styles.label}>Geschlecht</Text>
                 <TouchableOpacity 
                   key={`gender-dropdown-${selectedGender || 'unselected'}`}
                   style={[
@@ -3038,8 +2787,8 @@ const HomeScreen = () => {
                       selectedGender ? styles.dropdownButtonTextSelected : {}
                     ]}>
                       {selectedGender ? 
-                        genderOptions.find(option => option.value === selectedGender)?.label || 'Please select' : 
-                        'Please select'}
+                        genderOptions.find(option => option.value === selectedGender)?.label || 'Bitte wählen' : 
+                        'Bitte wählen'}
                     </Text>
                   </View>
                 </TouchableOpacity>
@@ -3069,7 +2818,7 @@ const HomeScreen = () => {
               </View>
               
               <View style={styles.formGroup}>
-                <Text style={styles.label}>Height (cm)</Text>
+                <Text style={styles.label}>Größe (cm)</Text>
                 <TextInput
                   style={styles.input}
                   value={localPersonalInfo.height ? String(localPersonalInfo.height) : ''}
@@ -3077,7 +2826,7 @@ const HomeScreen = () => {
                     const height = text === '' ? null : parseInt(text);
                     setLocalPersonalInfo(prev => ({...prev, height}));
                   }}
-                  placeholder="Height in cm"
+                  placeholder="Größe in cm"
                   keyboardType="number-pad"
                   returnKeyType="done"
                   blurOnSubmit={true}
@@ -3085,7 +2834,7 @@ const HomeScreen = () => {
               </View>
               
               <View style={styles.formGroup}>
-                <Text style={styles.label}>Weight (kg)</Text>
+                <Text style={styles.label}>Gewicht (kg)</Text>
                 <TextInput
                   style={styles.input}
                   value={localPersonalInfo.weight ? String(localPersonalInfo.weight) : ''}
@@ -3093,7 +2842,7 @@ const HomeScreen = () => {
                     const weight = text === '' ? null : parseFloat(text);
                     setLocalPersonalInfo(prev => ({...prev, weight}));
                   }}
-                  placeholder="Weight in kg"
+                  placeholder="Gewicht in kg"
                   keyboardType="decimal-pad"
                   returnKeyType="done"
                   blurOnSubmit={true}
@@ -3101,7 +2850,7 @@ const HomeScreen = () => {
               </View>
               
               <View style={styles.formGroup}>
-                <Text style={styles.label}>Fitness Level (1-10)</Text>
+                <Text style={styles.label}>Fitness-Level (1-10)</Text>
                 <TextInput
                   style={styles.input}
                   value={(() => {
@@ -3114,7 +2863,7 @@ const HomeScreen = () => {
                     console.log(`✏️ User entered fitness_level: ${text} (parsed to: ${fitnessLevel})`);
                     setLocalPersonalInfo(prev => ({...prev, fitness_level: fitnessLevel}));
                   }}
-                  placeholder="Fitness Level (1-10)"
+                  placeholder="Fitness-Level (1-10)"
                   keyboardType="number-pad"
                   returnKeyType="done"
                   blurOnSubmit={true}
@@ -3122,7 +2871,7 @@ const HomeScreen = () => {
               </View>
               
               <View style={styles.formGroup}>
-                <Text style={styles.label}>Stress Level (1-10)</Text>
+                <Text style={styles.label}>Stress-Level (1-10)</Text>
                 <TextInput
                   style={styles.input}
                   value={localPersonalInfo.stress_level ? String(localPersonalInfo.stress_level) : ''}
@@ -3130,7 +2879,7 @@ const HomeScreen = () => {
                     const stressLevel = text === '' ? null : parseInt(text);
                     setLocalPersonalInfo(prev => ({...prev, stress_level: stressLevel}));
                   }}
-                  placeholder="Stress Level (1-10)"
+                  placeholder="Stress-Level (1-10)"
                   keyboardType="number-pad"
                   returnKeyType="done"
                   blurOnSubmit={true}
@@ -3138,7 +2887,7 @@ const HomeScreen = () => {
               </View>
               
               <View style={styles.formGroup}>
-                <Text style={styles.label}>Sleep Quality (1-10)</Text>
+                <Text style={styles.label}>Schlafqualität (1-10)</Text>
                 <TextInput
                   style={styles.input}
                   value={localPersonalInfo.sleep_quality ? String(localPersonalInfo.sleep_quality) : ''}
@@ -3146,7 +2895,7 @@ const HomeScreen = () => {
                     const sleepQuality = text === '' ? null : parseInt(text);
                     setLocalPersonalInfo(prev => ({...prev, sleep_quality: sleepQuality}));
                   }}
-                  placeholder="Sleep Quality (1-10)"
+                  placeholder="Schlafqualität (1-10)"
                   keyboardType="number-pad"
                   returnKeyType="done"
                   blurOnSubmit={true}
@@ -3154,12 +2903,12 @@ const HomeScreen = () => {
               </View>
               
               <View style={styles.formGroup}>
-                <Text style={styles.label}>Pre-existing Conditions</Text>
+                <Text style={styles.label}>Vorerkrankungen</Text>
                 <TextInput
                   style={[styles.input, styles.textArea]}
                   value={localPersonalInfo.pre_existing_conditions}
                   onChangeText={(text) => setLocalPersonalInfo({...localPersonalInfo, pre_existing_conditions: text})}
-                  placeholder="Pre-existing Conditions"
+                  placeholder="Vorerkrankungen"
                   multiline={true}
                   numberOfLines={3}
                   blurOnSubmit={true}
@@ -3167,12 +2916,12 @@ const HomeScreen = () => {
               </View>
               
               <View style={styles.formGroup}>
-                <Text style={styles.label}>Allergies</Text>
+                <Text style={styles.label}>Allergien</Text>
                 <TextInput
                   style={[styles.input, styles.textArea]}
                   value={localPersonalInfo.allergies}
                   onChangeText={(text) => setLocalPersonalInfo({...localPersonalInfo, allergies: text})}
-                  placeholder="Allergies"
+                  placeholder="Allergien"
                   multiline={true}
                   numberOfLines={3}
                   blurOnSubmit={true}
@@ -3180,7 +2929,7 @@ const HomeScreen = () => {
               </View>
               
               <View style={styles.formGroup}>
-                <Text style={styles.label}>Smoker</Text>
+                <Text style={styles.label}>Raucher</Text>
                 <TouchableOpacity 
                   style={[
                     styles.dropdownButton,
@@ -3195,8 +2944,8 @@ const HomeScreen = () => {
                       selectedSmoker ? styles.dropdownButtonTextSelected : {}
                     ]}>
                       {selectedSmoker ? 
-                        smokerOptions.find(option => option.value === selectedSmoker)?.label || 'Please select' : 
-                        'Please select'}
+                        smokerOptions.find(option => option.value === selectedSmoker)?.label || 'Bitte wählen' : 
+                        'Bitte wählen'}
                     </Text>
                   </View>
                 </TouchableOpacity>
@@ -3226,7 +2975,7 @@ const HomeScreen = () => {
               </View>
               
               <View style={styles.formGroup}>
-                <Text style={styles.label}>Alcohol Consumption</Text>
+                <Text style={styles.label}>Alkoholkonsum</Text>
                 <TouchableOpacity 
                   style={[
                     styles.dropdownButton,
@@ -3241,8 +2990,8 @@ const HomeScreen = () => {
                       selectedAlcohol ? styles.dropdownButtonTextSelected : {}
                     ]}>
                       {selectedAlcohol ? 
-                        alcoholOptions.find(option => option.value === selectedAlcohol)?.label || 'Please select' : 
-                        'Please select'}
+                        alcoholOptions.find(option => option.value === selectedAlcohol)?.label || 'Bitte wählen' : 
+                        'Bitte wählen'}
                     </Text>
                   </View>
                 </TouchableOpacity>
@@ -3278,13 +3027,13 @@ const HomeScreen = () => {
                   style={[styles.button, styles.submitButton]} 
                   onPress={handleSubmit}
                 >
-                  <Text style={styles.buttonText}>Send</Text>
+                  <Text style={styles.buttonText}>Absenden</Text>
                 </TouchableOpacity>
                 <TouchableOpacity 
                   style={[styles.button, styles.cancelButton]} 
                   onPress={handleCancel}
                 >
-                  <Text style={styles.buttonText}>Cancel</Text>
+                  <Text style={styles.buttonText}>Abbrechen</Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>
@@ -3674,7 +3423,7 @@ const HomeScreen = () => {
   return (
     <View style={styles.container}>
       <View style={styles.sectionTitle}>
-      <Text style={styles.sectionTitle}>Welcome {personalInfo.firstname}! </Text>
+      <Text style={styles.sectionTitle}>Willkommen! </Text>
         <View style={styles.headerButtons}>
           <TouchableOpacity
             style={styles.refreshButton}
@@ -3695,7 +3444,7 @@ const HomeScreen = () => {
                 onPress={() => setGarminModalVisible(true)}
               activeOpacity={0.7}
             >
-              <Text style={styles.sourceButtonText}>Change Login</Text>
+              <Text style={styles.sourceButtonText}>Login ändern</Text>
             </TouchableOpacity>
           )}
 
@@ -3707,7 +3456,7 @@ const HomeScreen = () => {
             }}
           >
             <Text style={styles.sourceButtonText}>
-              {dataSource === 'apple' ? 'Connect Garmin Watch' : 'Connect Apple Watch'}
+              {dataSource === 'apple' ? 'Garmin verknüpfen' : 'Apple Watch verknüpfen'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -3725,94 +3474,27 @@ const HomeScreen = () => {
             <Text style={styles.healthKitStatus}>Apple HealthKit verbunden</Text>
           )}
 
-         
+          {/* Stress Section */}
+          {garminData.stress && (
+            <View style={styles.dataContainer}>
+              <Text style={styles.sectionTitle}>Stress Level</Text>
+              <View style={styles.dataRow}>
+                <Text style={styles.dataLabel}>Durchschnitt:</Text>
+                <Text style={styles.dataValue}>{garminData.stress.avg_stress}</Text>
+              </View>
+              <View style={styles.dataRow}>
+                <Text style={styles.dataLabel}>Maximum:</Text>
+                <Text style={styles.dataValue}>{garminData.stress.max_stress}</Text>
+              </View>
+            </View>
+          )}
 
-<View style={styles.buttonContainer}>
-            <TouchableOpacity 
-              style={styles.button}
-              onPress={handlePssButtonPress}
-            >
-              <View style={styles.buttonWithCheckbox}>
-                <Text style={styles.buttonText}>PSS Survey</Text>
-                {surveySubmitted && <Text style={styles.checkmark}>✓</Text>}
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.button}
-              onPress={handlePersonalInfoButtonPress}
-            >
-              <View style={styles.buttonWithCheckbox}>
-                <Text style={styles.buttonText}>Personal Information</Text>
-                {personalInfoSubmitted && <Text style={styles.checkmark}>✓</Text>}
-              </View>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[styles.button, { backgroundColor: '#4CAF50' }]}
-              onPress={async () => {
-                // Retrieve credentials before the function call
-                const storedEmail = email || await SecureStore.getItemAsync("garmin_email") || "";
-                const storedPassword = password || await SecureStore.getItemAsync("garmin_password") || "";
-                
-                uploadHistoricalData(
-                  db, 
-                  getOrCreateDeviceId, 
-                  setLoading,
-                  dataSource,
-                  async (email, password, date) => {
-                    // Create a function to fetch Garmin data for a specific date
-                    try {
-                      console.log(`Fetching historical data for date: ${date}`);
-                      const requestBody = { 
-                        email: email, 
-                        password: password, 
-                        date: date 
-                      };
-                      
-                      const API_URL = Constants.expoConfig?.extra?.apiUrl || 'https://dodo-holy-primarily.ngrok-free.app';
-                      const response = await fetch(`${API_URL}/all_data`, {
-                        method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(requestBody),
-                      });
-                      
-                      if (!response.ok) {
-                        throw new Error(`Server error: ${response.status}`);
-                      }
-                      
-                      const data = await response.json();
-                      console.log(`Successfully received data for ${date}`);
-                      return data;
-                    } catch (error) {
-                      console.error(`Error fetching Garmin data for ${date}:`, error);
-                      throw error;
-                    }
-                  },
-                  healthKitAvailable,
-                  {
-                    email: storedEmail,
-                    password: storedPassword
-                  }
-                ).then(() => {
-                  // Set uploaded flag on success
-                  setHistoryDataUploaded(true);
-                });
-              }}
-            >
-              <View style={styles.buttonWithCheckbox}>
-                <Text style={styles.buttonText}>Upload 3 Months Data</Text>
-                {historyDataUploaded && <Text style={styles.checkmark}>✓</Text>}
-              </View>
-            </TouchableOpacity>
-          </View>
+          
 
           {/* Sleep Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Sleep Analysis</Text>
-            <View style={styles.hrvSummary}>
+            <Text style={styles.sectionTitle}>Schlafanalyse</Text>
+            
             {/* Sleep Summary */}
             {garminData?.sleep?.summary ? (
               <>
@@ -3874,33 +3556,30 @@ const HomeScreen = () => {
             ) : (
               <Text style={styles.noData}>No sleep data available</Text>
             )}
-            </View>
           </View>
 
           {/* Activity Section */}
-          
           {garminData.activity && (
-            <View style={styles.sectionTitle}>
-              <Text style={styles.sectionTitle}>Activity</Text>
-              <View style={styles.hrvSummary}>
+            <View style={styles.dataContainer}>
+              <Text style={styles.sectionTitle}>Aktivität</Text>
               <View style={styles.dataRow}>
-                <Text style={styles.dataLabel}>Steps:</Text>
+                <Text style={styles.dataLabel}>Schritte:</Text>
                 <Text style={styles.dataValue}>{garminData.activity.steps || 'N/A'}</Text>
               </View>
               <View style={styles.dataRow}>
-                <Text style={styles.dataLabel}>Calories:</Text>
+                <Text style={styles.dataLabel}>Kalorien:</Text>
                 <Text style={styles.dataValue}>{garminData.activity.calories_burned || 'N/A'}</Text>
               </View>
               <View style={styles.dataRow}>
-                <Text style={styles.dataLabel}>Active Minutes:</Text>
+                <Text style={styles.dataLabel}>Aktive Minuten:</Text>
                 <Text style={styles.dataValue}>{garminData.activity.active_minutes || 'N/A'}</Text>
               </View>
               <View style={styles.dataRow}>
-                <Text style={styles.dataLabel}>Distance:</Text>
+                <Text style={styles.dataLabel}>Distanz:</Text>
                 <Text style={styles.dataValue}>{garminData.activity.distance_km?.toFixed(1) || 'N/A'} km</Text>
               </View>
               <View style={styles.dataRow}>
-                <Text style={styles.dataLabel}>Mindful Minutes:</Text>
+                <Text style={styles.dataLabel}>Achtsamkeitsminuten:</Text>
                 <Text style={styles.dataValue}>{garminData.activity.mindful_minutes !== undefined && garminData.activity.mindful_minutes !== null ? garminData.activity.mindful_minutes : 'N/A'}</Text>
               </View>
               <View style={styles.row}>
@@ -3918,14 +3597,13 @@ const HomeScreen = () => {
                   </Text>
                 </View>
               )}
-              </View>
             </View>
           )}
 
   
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Training</Text>
+            <Text style={styles.sectionTitle}>Gestrige Aktivitäten</Text>
             {garminData?.activity?.daily_activities ? (
               garminData.activity.daily_activities.length > 0 ? (
               garminData.activity.daily_activities.map((activity, index) => (
@@ -3944,7 +3622,7 @@ const HomeScreen = () => {
 
           {/* New HRV Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Heart Rate Variability</Text>
+            <Text style={styles.sectionTitle}>Herzfrequenzvariabilität</Text>
             {garminData?.hrv ? (
               <>
                 <View style={styles.hrvSummary}>
@@ -3996,7 +3674,21 @@ const HomeScreen = () => {
             )}
           </View>
 
-          
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity 
+              style={styles.button}
+              onPress={handlePssButtonPress}
+            >
+              <Text style={styles.buttonText}>PSS Umfrage</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.button}
+              onPress={handlePersonalInfoButtonPress}
+            >
+              <Text style={styles.buttonText}>Persönliche Informationen</Text>
+            </TouchableOpacity>
+          </View>
         </ScrollView>
       )}
 
@@ -4046,7 +3738,7 @@ const HomeScreen = () => {
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>PSS Survey</Text>
+              <Text style={styles.modalTitle}>PSS Umfrage</Text>
               <TouchableOpacity onPress={() => setPssModalVisible(false)}>
                 <Text style={styles.closeButton}>✕</Text>
               </TouchableOpacity>
@@ -4080,7 +3772,7 @@ const HomeScreen = () => {
               )}
             />
             <TouchableOpacity style={styles.button} onPress={submitSurvey}>
-              <Text style={styles.buttonText}>Submit</Text>
+              <Text style={styles.buttonText}>Absenden</Text>
             </TouchableOpacity>
           </View>
         </View>
