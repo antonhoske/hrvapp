@@ -57,7 +57,9 @@
       "apiUrl": "https://dodo-holy-primarily.ngrok-free.app"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      "expo-background-fetch",
+      "expo-task-manager"
     ]
   }
 }

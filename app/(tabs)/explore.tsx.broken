@@ -19,15 +19,8 @@ import { getAuth, initializeAuth, Auth } from "firebase/auth";
 import Constants from 'expo-constants';
 import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { 
-  requestNotificationPermissions, 
-  scheduleDailySurveyReminder, 
-  getReminderTimePreference, 
-  refreshDailyReminder,
-  isSurveyReminderScheduled 
-} from '../utils/notifications';
+import { requestNotificationPermissions, scheduleDailySurveyReminder, getReminderTimePreference } from '../utils/notifications';
 import NotificationTimePicker from '../components/NotificationTimePicker';
-import { useDataSource } from '../components/DataSourceContext';
 
 // Add type declarations for Apple HealthKit
 declare module 'react-native-health' {
@@ -57,7 +50,7 @@ const firebaseConfig = {
   messagingSenderId: "16228935546",
   appId: "1:16228935546:web:9615f3300e942f861f58c3",
   measurementId: "G-2B6SVW0YSS"
-};
+}
 
 // API configuration
 const API_URL = Constants.expoConfig?.extra?.apiUrl || 'https://dodo-holy-primarily.ngrok-free.app';
@@ -68,7 +61,7 @@ const ERROR_MESSAGES = {
   SERVER: "Server error. Please try again later.",
   AUTH: "Authentication failed. Please check your credentials.",
   INIT: "Failed to initialize the app. Please try again."
-};
+}
 
 // Initialize Firebase only if we're in a native environment
 let app: FirebaseApp | undefined;
@@ -101,7 +94,7 @@ interface GarminData {
       lastNight5MinHigh: number;
       status: string;
       feedbackPhrase: string;
-    };
+    }
     readings: {
       time: string;
       value: number;
@@ -120,7 +113,7 @@ interface GarminData {
       average_hrv: number;
       lowest_hrv: number;
       highest_hrv: number;
-    };
+    }
     phases: {
       start_time: string;
       end_time: string;
@@ -723,11 +716,36 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  buttonDisabled: {
-    backgroundColor: '#ccc',
+  centeredView: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
-  buttonTextDisabled: {
-    color: '#999',
+  modalView: {
+    width: '80%',
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 35,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  closeButtonText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#007AFF',
+  },
+  sectionText: {
+    fontSize: 18,
+    marginBottom: 10,
+    textAlign: 'center',
   },
 });
 
@@ -749,11 +767,10 @@ const getOrCreateDeviceId = async (): Promise<string> => {
     console.error('Error handling device ID:', error);
     throw error;
   }
-};
+}
 
 const HomeScreen = () => {
   const router = useRouter();
-  const { dataSource, setDataSource } = useDataSource();
   const [isInitialized, setIsInitialized] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
   const [stressData, setStressData] = useState<HealthData | null>(null);
@@ -764,7 +781,7 @@ const HomeScreen = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
-  const [responses, setResponses] = useState([-1, 0, 0, 0]);
+  const [responses, setResponses] = useState([0, 0, 0, 0]);
   const [otherText, setOtherText] = useState("");
   // New daily survey response states for yes/no questions
   const [dailySurveyResponses, setDailySurveyResponses] = useState({
@@ -773,7 +790,6 @@ const HomeScreen = () => {
     alcohol: false,
     smoking: false,
     caffeine: false,
-    marijuana: false,
     bright_lights: false,
     phone_in_bed: false,
     processed_food: false,
@@ -836,6 +852,7 @@ const HomeScreen = () => {
     heart_rate: null
   });
 
+  const [dataSource, setDataSource] = useState<'garmin' | 'apple' | null>('apple');
   const [sourceSelectionVisible, setSourceSelectionVisible] = useState(true);
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [isModalTransitioning, setIsModalTransitioning] = useState(false);
@@ -888,7 +905,7 @@ const HomeScreen = () => {
       default:
         return [];
     }
-  };
+  }
 
   const likertOptions = [
     { value: 1, label: "1" },
@@ -977,7 +994,7 @@ const HomeScreen = () => {
             if (prev.queuedModal) {
               
               openModal(prev.queuedModal);
-              return {...prev, queuedModal: null};
+              return {...prev, queuedModal: null}
             }
             return prev;
           });
@@ -1007,7 +1024,7 @@ const HomeScreen = () => {
         isTransitioning: false
       }));
     }
-  };
+  }
 
   const closeModal = (modalType: 'garmin' | 'pss' | 'personal') => {
     
@@ -1054,19 +1071,19 @@ const HomeScreen = () => {
           if (prev.queuedModal) {
             
             openModal(prev.queuedModal);
-            return {...prev, queuedModal: null};
+            return {...prev, queuedModal: null}
           }
           return prev;
         });
       }, 100);
     }, 400);
-  };
+  }
 
   // Helper functions for processing health data
   const processSleepData = (sleepData: SleepSample[] | null) => {
     if (!sleepData || sleepData.length === 0) {
       console.error("No sleep data available");
-      return { startTime: null, endTime: null, totalSleep: 0 };
+      return { startTime: null, endTime: null, totalSleep: 0 }
     }
 
     let totalSleep = 0;
@@ -1143,8 +1160,8 @@ const HomeScreen = () => {
       startTime,
       endTime,
       phases
-    };
-  };
+    }
+  }
 
   const calculateAverageHRV = (hrvData: HealthValue[], sleepStart: string, sleepEnd: string) => {
     if (hrvData.length === 0) return 0;
@@ -1169,7 +1186,7 @@ const HomeScreen = () => {
     // If no sleep data or no readings during sleep, use all readings
     const sum = hrvData.reduce((acc, curr) => acc + curr.value, 0);
     return Math.round(sum / hrvData.length);
-  };
+  }
 
   const findHighestHRV = (hrvData: HealthValue[], sleepStart: string, sleepEnd: string) => {
     if (hrvData.length === 0) return 0;
@@ -1192,7 +1209,7 @@ const HomeScreen = () => {
     
     // If no sleep data or no readings during sleep, use all readings
     return Math.max(...hrvData.map(d => d.value));
-  };
+  }
 
   const calculateActiveMinutes = (heartRateData: any[]) => {
     // Calculate active minutes based on heart rate and workouts
@@ -1206,7 +1223,7 @@ const HomeScreen = () => {
     }
 
     return activeMinutes;
-  };
+  }
 
   const calculateRestingHeartRate = (heartRateData: any[]) => {
     if (heartRateData.length === 0) return 0;
@@ -1215,13 +1232,13 @@ const HomeScreen = () => {
     const tenPercentile = Math.floor(sortedHR.length * 0.1);
     const restingHRs = sortedHR.slice(0, tenPercentile);
     return Math.round(restingHRs.reduce((a, b) => a + b, 0) / restingHRs.length);
-  };
+  }
 
   const calculateAverageHeartRate = (heartRateData: any[]) => {
     if (heartRateData.length === 0) return 0;
     const sum = heartRateData.reduce((acc: number, curr: any) => acc + curr.value, 0);
     return Math.round(sum / heartRateData.length);
-  };
+  }
 
   const fetchHRVData = async () => {
     setLoading(true);
@@ -1258,21 +1275,21 @@ const HomeScreen = () => {
         endDate: endDate.toISOString(),
         ascending: false,
         limit: 288, // Increased limit to ensure we get all data points for the day (one reading every 5 minutes)
-      };
+      }
 
       const sleepOptions = {
         startDate: sleepStartDate.toISOString(),
         endDate: sleepEndDate.toISOString(),
         ascending: true,
         limit: 288,
-      };
+      }
 
                   // Initialize default values
-      let steps = { value: 0 };
-      let calories = { value: 0 };
-      let distance = { value: 0 };
-      let workouts = { activeMinutes: 0, activities: [] };
-      let vo2Max = { value: 0, date: '', status: 'N/A' };
+      let steps = { value: 0 }
+      let calories = { value: 0 }
+      let distance = { value: 0 }
+      let workouts = { activeMinutes: 0, activities: [] }
+      let vo2Max = { value: 0, date: '', status: 'N/A' }
       let mindfulMinutes = 0; // Initialize mindful minutes
 
       // Fetch workouts first to calculate active minutes
@@ -1646,7 +1663,7 @@ const HomeScreen = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   const uploadGarminData = async (garminData: GarminData) => {
     if (!db) {
@@ -1667,7 +1684,7 @@ const HomeScreen = () => {
         timestamp: new Date(),
         deviceId: currentDeviceId,
         uploadDate: new Date().toISOString().split('T')[0]
-      };
+      }
 
       // Upload to device-specific collection
       const deviceGarminRef = doc(firestore, `devices/${currentDeviceId}/garminData`, new Date().toISOString().split('T')[0]);
@@ -1683,7 +1700,7 @@ const HomeScreen = () => {
       Alert.alert('Error', 'Failed to upload data to database');
       throw error;
     }
-  };
+  }
 
   const fetchGarminData = async (storedEmail: string, storedPassword: string) => {
     setLoading(true);
@@ -1700,7 +1717,7 @@ const HomeScreen = () => {
         email: storedEmail, 
         password: storedPassword, 
         date: targetDate 
-      };
+      }
       
       
       const response = await fetch(`${API_URL}/all_data`, {
@@ -1725,7 +1742,7 @@ const HomeScreen = () => {
       const data = await response.json();
       
       // Save current data to preserve Apple HealthKit values if needed
-      const currentData = {...garminData};
+      const currentData = {...garminData}
       
       // Make sure activity structure exists
       if (!data.activity) {
@@ -1742,7 +1759,7 @@ const HomeScreen = () => {
           vo2_max_date: '',
           daily_activities: [],
           mindful_minutes: 0
-        };
+        }
       }
       
       // If there are no real values from Garmin but we have Apple HealthKit data, preserve it
@@ -1792,7 +1809,7 @@ const HomeScreen = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   //check if credentials already exist
   const checkLogin = async () => {
@@ -1809,7 +1826,7 @@ const HomeScreen = () => {
       
       fetchGarminData(storedEmail, storedPassword);
     }
-  };
+  }
 
   //login with new credentials
   const handleLogin = async () => {
@@ -1817,7 +1834,7 @@ const HomeScreen = () => {
     await SecureStore.setItemAsync("garmin_password", password);
     setGarminModalVisible(false);
     fetchGarminData(email, password);
-  };
+  }
 
   // Add this function to check if the survey was submitted today
   const checkSurveyDate = useCallback(async () => {
@@ -1858,59 +1875,22 @@ const HomeScreen = () => {
         // Schedule daily reminder at 9 AM
         await scheduleDailySurveyReminder();
       }
-    };
+    }
     
     setupNotifications().catch(error => {
       console.error('Failed to set up notifications:', error);
     });
     
     // Also check when app comes to foreground
-    const subscription = AppState.addEventListener('change', async (nextAppState) => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active') {
         checkSurveyDate();
-        
-        // Limit refresh checks to prevent constant updates
-        // Only refresh if it's been at least an hour since the last refresh
-        const now = new Date();
-        const lastRefreshStr = await AsyncStorage.getItem('lastNotificationRefresh');
-        let shouldRefresh = true;
-        
-        if (lastRefreshStr) {
-          const lastRefresh = new Date(lastRefreshStr);
-          const hoursSinceLastRefresh = (now.getTime() - lastRefresh.getTime()) / (1000 * 60 * 60);
-          shouldRefresh = hoursSinceLastRefresh >= 1; // Only refresh if it's been at least 1 hour
-        }
-        
-        if (shouldRefresh) {
-          // Store the refresh time
-          await AsyncStorage.setItem('lastNotificationRefresh', now.toISOString());
-          
-          // Only perform the refresh if needed
-          const isNeedRefresh = await isSurveyReminderScheduled();
-          if (!isNeedRefresh) {
-            refreshDailyReminder().catch(error => {
-              console.error('Error refreshing notification settings:', error);
-            });
-          }
-        }
       }
     });
     
-    // Do an initial check for the notification status
-    const checkInitialNotification = async () => {
-      const isNeedRefresh = await isSurveyReminderScheduled();
-      if (!isNeedRefresh) {
-        refreshDailyReminder().catch(error => {
-          console.error('Error refreshing notification settings:', error);
-        });
-      }
-    };
-    
-    checkInitialNotification();
-    
     return () => {
       subscription.remove();
-    };
+    }
   }, [initializeApp, checkSurveyDate]);
 
   useEffect(() => {
@@ -1961,7 +1941,7 @@ const HomeScreen = () => {
             ],
             write: [],
           },
-        };
+        }
 
         try {
           // First check if HealthKit is available on the device
@@ -2082,7 +2062,7 @@ const HomeScreen = () => {
       } finally {
         setLoading(false);
       }
-    };
+    }
 
     // Update the handler functions to use the new modal system
     const handleSourceChange = async (newSource: 'apple' | 'garmin') => {
@@ -2096,7 +2076,7 @@ const HomeScreen = () => {
         // If we're switching away from garmin, close the modal
         closeModal('garmin');
       }
-    };
+    }
 
     // Use the openModal functions we created earlier
    
@@ -2112,12 +2092,12 @@ const HomeScreen = () => {
         setGarminModalVisible(false);
         await fetchGarminData(storedEmail, storedPassword);
       }
-    };
+    }
     
     // Helper function to update data source state
     const updateDataSourceState = (newSource: 'apple' | 'garmin') => {
       // Capture existing data before clearing
-      const previousData = {...garminData};
+      const previousData = {...garminData}
       
       // If switching from Apple to Garmin, preserve activity data
       if (dataSource === 'apple' && newSource === 'garmin' && previousData.activity) {
@@ -2171,19 +2151,10 @@ const HomeScreen = () => {
     
       // Update data source
       setDataSource(newSource);
-    };
+    }
     
     // Modify the handlePssButtonPress function to check if any modal is already open
     const handlePssButtonPress = () => {
-      // Only allow the PSS survey to open if personal info has been submitted
-      if (!personalInfoSubmitted) {
-        Alert.alert(
-          "Information Required",
-          "Please fill out your personal information first before taking the daily survey."
-        );
-        return;
-      }
-      
       if (isModalTransitioning) {
         
         return;
@@ -2214,7 +2185,7 @@ const HomeScreen = () => {
           setIsModalTransitioning(false);
         }, 500);
       }
-    };
+    }
 
     // Modify the handlePersonalInfoButtonPress function similarly
     const handlePersonalInfoButtonPress = () => {
@@ -2246,7 +2217,7 @@ const HomeScreen = () => {
           setIsModalTransitioning(false);
         }, 500);
       }
-    };
+    }
 
   // Data Source Selection Modal
   const DataSourceSelectionModal = () => (
@@ -2303,7 +2274,7 @@ const HomeScreen = () => {
     const newResponses = [...responses];
     newResponses[index] = value;
     setResponses(newResponses);
-  };
+  }
 
   const submitSurvey = async () => {
     if (!db) {
@@ -2312,7 +2283,7 @@ const HomeScreen = () => {
     }
     
     try {
-      if (responses[0] === -1 || responses.slice(1).some(response => response === 0)) {
+      if (responses.some(response => response === 0)) {
         Alert.alert("Error", "Please answer all questions");
         return;
       }
@@ -2331,7 +2302,7 @@ const HomeScreen = () => {
         timestamp: new Date(),
         deviceId,
         date: today // Store the date with the submission
-      };
+      }
       
       
       // Submit to Firestore
@@ -2339,7 +2310,7 @@ const HomeScreen = () => {
       await addDoc(pssCollection, data);
       
       // Reset and close
-      setResponses([-1, 0, 0, 0]);
+      setResponses([0, 0, 0, 0]);
       setOtherText("");
       
       // Reset daily survey responses
@@ -2349,7 +2320,6 @@ const HomeScreen = () => {
         alcohol: false,
         smoking: false,
         caffeine: false,
-        marijuana: false,
         bright_lights: false,
         phone_in_bed: false,
         processed_food: false,
@@ -2390,7 +2360,7 @@ const HomeScreen = () => {
       console.error("Error sending survey:", error);
       Alert.alert("Error", "Failed to send survey. Please try again later.");
     }
-  };
+  }
 
   const submitPersonalInfo = async (dataToSubmit = personalInfo) => {
     
@@ -2423,7 +2393,7 @@ const HomeScreen = () => {
         gender: String(dataToSubmit.gender),
         timestamp: new Date(),
         deviceId: currentDeviceId
-      };
+      }
       
       
 
@@ -2471,14 +2441,14 @@ const HomeScreen = () => {
       Alert.alert("Error", "There was a problem saving the data.");
       return false;
     }
-  };
+  }
 
   const formatDuration = (seconds: number) => {
     if (!seconds) return 'N/A';
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     return `${hours}h ${minutes}m`;
-  };
+  }
 
   // Update the autoFillPersonalInfo function to return data instead of updating state directly
   const autoFillPersonalInfo = async () => {
@@ -2486,7 +2456,7 @@ const HomeScreen = () => {
     
     try {
       // Create a copy of the current personalInfo to update
-      const updatedInfo = { ...personalInfo };
+      const updatedInfo = { ...personalInfo }
       let updatesMade = false;
       
       if (dataSource === 'garmin') {
@@ -2506,13 +2476,13 @@ const HomeScreen = () => {
       console.error("Error in autoFillPersonalInfo:", error);
       throw error;
     }
-  };
+  }
 
   // Helper function to format numeric values safely
   const formatNumber = (value: any): string => {
     const num = parseFloat(value);
     return !isNaN(num) ? num.toString() : "";
-  };
+  }
 
   // Update the PersonalInfoModal to handle NaN values
   const PersonalInfoModal = () => {
@@ -2638,7 +2608,7 @@ const HomeScreen = () => {
       setSelectedGender(value);
       setLocalPersonalInfo(prev => ({...prev, gender: value}));
       setShowGenderOptions(false);
-    };
+    }
     
     // Handle smoker selection
     const handleSmokerSelect = (value) => {
@@ -2646,7 +2616,7 @@ const HomeScreen = () => {
       setSelectedSmoker(value);
       setLocalPersonalInfo(prev => ({...prev, smoker: value}));
       setShowSmokerOptions(false);
-    };
+    }
     
     // Handle alcohol selection
     const handleAlcoholSelect = (value) => {
@@ -2654,7 +2624,7 @@ const HomeScreen = () => {
       setSelectedAlcohol(value);
       setLocalPersonalInfo(prev => ({...prev, alcohol_consumption: value}));
       setShowAlcoholOptions(false);
-    };
+    }
 
     const handleCloseModal = () => {
       
@@ -2672,7 +2642,7 @@ const HomeScreen = () => {
       }
       
       
-    };
+    }
 
     const handleSubmit = async () => {
       
@@ -2708,7 +2678,7 @@ const HomeScreen = () => {
         console.error("Error during submission:", error);
         Alert.alert('Error', 'There was a problem saving the data. Please try again.');
       }
-    };
+    }
 
     // Fix the auto-fill function to correctly access Garmin data structure
     const handleAutoFill = async () => {
@@ -2727,7 +2697,7 @@ const HomeScreen = () => {
           console.log("🍎 Using Apple HealthKit for auto-fill");
           
           // Create a copy of the local state to work with
-          const updatedInfo = { ...localPersonalInfo };
+          const updatedInfo = { ...localPersonalInfo }
           let updatesMade = false;
           
           try {
@@ -2738,7 +2708,7 @@ const HomeScreen = () => {
             const options = {
               startDate: threeMonthsAgo.toISOString(),
               endDate: new Date().toISOString(),
-            };
+            }
             
             console.log("📆 Date range:", threeMonthsAgo.toISOString(), "to", new Date().toISOString());
             
@@ -2950,9 +2920,9 @@ const HomeScreen = () => {
             });
             
             // Initialize with proper structures
-            let vo2MaxResults = { value: 0 };
-            let workoutResults = { activeMinutes: 0, activities: [] };
-            let distanceResult = { value: 0 };
+            let vo2MaxResults = { value: 0 }
+            let workoutResults = { activeMinutes: 0, activities: [] }
+            let distanceResult = { value: 0 }
             let hrvData = [];
             let totalMindfulMinutes = 0;
             
@@ -3296,7 +3266,7 @@ const HomeScreen = () => {
         // Reset loading state
         setIsAutoFilling(false);
       }
-    };
+    }
 
     // Add a direct close handler for the Cancel button
     const handleCancel = () => {
@@ -3311,73 +3281,73 @@ const HomeScreen = () => {
       }
       
       
-    };
+    }
 
     // Handle marijuana selection
     const handleMarijuanaSelect = (value) => {
       setLocalPersonalInfo(prev => ({...prev, marijuana_consumption: value}));
       setShowMarijuanaOptions(false);
-    };
+    }
 
     // Handle diet type selection
     const handleDietSelect = (value) => {
       setLocalPersonalInfo(prev => ({...prev, diet_type: value}));
       setShowDietOptions(false);
-    };
+    }
 
     // Handle cold shower selection
     const handleColdShowerSelect = (value) => {
       setLocalPersonalInfo(prev => ({...prev, cold_showers: value}));
       setShowColdShowerOptions(false);
-    };
+    }
 
     // Handle meditation selection
     const handleMeditationSelect = (value) => {
       setLocalPersonalInfo(prev => ({...prev, meditation: value}));
       setShowMeditationOptions(false);
-    };
+    }
 
     // Handle sauna selection
     const handleSaunaSelect = (value) => {
       setLocalPersonalInfo(prev => ({...prev, sauna_use: value}));
       setShowSaunaOptions(false);
-    };
+    }
 
     // Handle sleep medication selection
     const handleSleepMedicationSelect = (value) => {
       setLocalPersonalInfo(prev => ({...prev, sleep_medication: value}));
       setShowSleepMedicationOptions(false);
-    };
+    }
 
     // Handle blue light glasses selection
     const handleBlueLightGlassesSelect = (value) => {
       setLocalPersonalInfo(prev => ({...prev, blue_light_glasses: value}));
       setShowBlueLightGlassesOptions(false);
-    };
+    }
 
     // Handle intermittent fasting selection
     const handleIntermittentFastingSelect = (value) => {
       setLocalPersonalInfo(prev => ({...prev, intermittent_fasting: value}));
       setShowIntermittentFastingOptions(false);
-    };
+    }
 
     // Handle sleep mask selection
     const handleSleepMaskSelect = (value) => {
       setLocalPersonalInfo(prev => ({...prev, sleep_mask: value}));
       setShowSleepMaskOptions(false);
-    };
+    }
 
     // Handle seasonal allergies selection
     const handleSeasonalAllergiesSelect = (value) => {
       setLocalPersonalInfo(prev => ({...prev, seasonal_allergies: value}));
       setShowSeasonalAllergiesOptions(false);
-    };
+    }
 
     // Handle caffeine consumption selection
     const handleCaffeineConsumptionSelect = (value) => {
       setLocalPersonalInfo(prev => ({...prev, caffeine_consumption: value}));
       setShowCaffeineConsumptionOptions(false);
-    };
+    }
 
     return (
       <Modal
@@ -3604,101 +3574,6 @@ const HomeScreen = () => {
                   blurOnSubmit={true}
                 />
               </View>
-
-                            {/* Seasonal Allergies */}
-                            <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Seasonal Allergies</Text>
-                <TouchableOpacity 
-                  style={[
-                    styles.dropdownButton,
-                    localPersonalInfo.seasonal_allergies ? styles.dropdownButtonSelected : {}
-                  ]}
-                  onPress={() => setShowSeasonalAllergiesOptions(!showSeasonalAllergiesOptions)}
-                >
-                  <View style={styles.dropdownContent}>
-                    <Text style={styles.dropdownArrow}>{showSeasonalAllergiesOptions ? '▲' : '▼'}</Text>
-                    <Text style={[
-                      styles.dropdownButtonText,
-                      localPersonalInfo.seasonal_allergies ? styles.dropdownButtonTextSelected : {}
-                    ]}>
-                      {localPersonalInfo.seasonal_allergies ? 
-                        yesNoOptions.find(option => option.value === localPersonalInfo.seasonal_allergies)?.label || 'Please select' : 
-                        'Please select'}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-                
-                {showSeasonalAllergiesOptions && (
-                  <View style={styles.optionsList}>
-                    {yesNoOptions.map((option) => (
-                      <TouchableOpacity
-                        key={option.value}
-                        style={[
-                          styles.optionItem,
-                          localPersonalInfo.seasonal_allergies === option.value ? styles.selectedOption : {}
-                        ]}
-                        onPress={() => handleSeasonalAllergiesSelect(option.value)}
-                      >
-                        <Text style={[
-                          styles.optionText,
-                          localPersonalInfo.seasonal_allergies === option.value ? styles.selectedOptionText : {}
-                        ]}>
-                          {option.label}
-                          {localPersonalInfo.seasonal_allergies === option.value && ' ✓'}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-              </View>
-
-
-              {/* Caffeine Consumption */}
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Caffeine Consumption</Text>
-                <TouchableOpacity 
-                  style={[
-                    styles.dropdownButton,
-                    localPersonalInfo.caffeine_consumption ? styles.dropdownButtonSelected : {}
-                  ]}
-                  onPress={() => setShowCaffeineConsumptionOptions(!showCaffeineConsumptionOptions)}
-                >
-                  <View style={styles.dropdownContent}>
-                    <Text style={styles.dropdownArrow}>{showCaffeineConsumptionOptions ? '▲' : '▼'}</Text>
-                    <Text style={[
-                      styles.dropdownButtonText,
-                      localPersonalInfo.caffeine_consumption ? styles.dropdownButtonTextSelected : {}
-                    ]}>
-                      {localPersonalInfo.caffeine_consumption ? 
-                        yesNoOptions.find(option => option.value === localPersonalInfo.caffeine_consumption)?.label || 'Please select' : 
-                        'Please select'}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-                
-                {showCaffeineConsumptionOptions && (
-                  <View style={styles.optionsList}>
-                    {yesNoOptions.map((option) => (
-                      <TouchableOpacity
-                        key={option.value}
-                        style={[
-                          styles.optionItem,
-                          localPersonalInfo.caffeine_consumption === option.value ? styles.selectedOption : {}
-                        ]}
-                        onPress={() => handleCaffeineConsumptionSelect(option.value)}
-                      >
-                        <Text style={[
-                          styles.optionText,
-                          localPersonalInfo.caffeine_consumption === option.value ? styles.selectedOptionText : {}
-                        ]}>
-                          {option.label}
-                          {localPersonalInfo.caffeine_consumption === option.value && ' ✓'}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-              </View>
               
               <View style={styles.formGroup}>
                 <Text style={styles.formLabel}>Smoker</Text>
@@ -3881,53 +3756,6 @@ const HomeScreen = () => {
                           {localPersonalInfo.diet_type === option.value && ' ✓'}
                         </Text>
                 </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-              </View>
-
-                            {/* Intermittent Fasting */}
-                            <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Intermittent Fasting</Text>
-                <TouchableOpacity 
-                  style={[
-                    styles.dropdownButton,
-                    localPersonalInfo.intermittent_fasting ? styles.dropdownButtonSelected : {}
-                  ]}
-                  onPress={() => setShowIntermittentFastingOptions(!showIntermittentFastingOptions)}
-                >
-                  <View style={styles.dropdownContent}>
-                    <Text style={styles.dropdownArrow}>{showIntermittentFastingOptions ? '▲' : '▼'}</Text>
-                    <Text style={[
-                      styles.dropdownButtonText,
-                      localPersonalInfo.intermittent_fasting ? styles.dropdownButtonTextSelected : {}
-                    ]}>
-                      {localPersonalInfo.intermittent_fasting ? 
-                        yesNoOptions.find(option => option.value === localPersonalInfo.intermittent_fasting)?.label || 'Please select' : 
-                        'Please select'}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-                
-                {showIntermittentFastingOptions && (
-                  <View style={styles.optionsList}>
-                    {yesNoOptions.map((option) => (
-                      <TouchableOpacity
-                        key={option.value}
-                        style={[
-                          styles.optionItem,
-                          localPersonalInfo.intermittent_fasting === option.value ? styles.selectedOption : {}
-                        ]}
-                        onPress={() => handleIntermittentFastingSelect(option.value)}
-                      >
-                        <Text style={[
-                          styles.optionText,
-                          localPersonalInfo.intermittent_fasting === option.value ? styles.selectedOptionText : {}
-                        ]}>
-                          {option.label}
-                          {localPersonalInfo.intermittent_fasting === option.value && ' ✓'}
-                        </Text>
-                      </TouchableOpacity>
                     ))}
                   </View>
                 )}
@@ -4168,1451 +3996,293 @@ const HomeScreen = () => {
                 )}
               </View>
 
+              {/* Intermittent Fasting */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Intermittent Fasting</Text>
+                <TouchableOpacity 
+                  style={[
+                    styles.dropdownButton,
+                    localPersonalInfo.intermittent_fasting ? styles.dropdownButtonSelected : {}
+                  ]}
+                  onPress={() => setShowIntermittentFastingOptions(!showIntermittentFastingOptions)}
+                >
+                  <View style={styles.dropdownContent}>
+                    <Text style={styles.dropdownArrow}>{showIntermittentFastingOptions ? '▲' : '▼'}</Text>
+                    <Text style={[
+                      styles.dropdownButtonText,
+                      localPersonalInfo.intermittent_fasting ? styles.dropdownButtonTextSelected : {}
+                    ]}>
+                      {localPersonalInfo.intermittent_fasting ? 
+                        yesNoOptions.find(option => option.value === localPersonalInfo.intermittent_fasting)?.label || 'Please select' : 
+                        'Please select'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+                
+                {showIntermittentFastingOptions && (
+                  <View style={styles.optionsList}>
+                    {yesNoOptions.map((option) => (
+                      <TouchableOpacity
+                        key={option.value}
+                        style={[
+                          styles.optionItem,
+                          localPersonalInfo.intermittent_fasting === option.value ? styles.selectedOption : {}
+                        ]}
+                        onPress={() => handleIntermittentFastingSelect(option.value)}
+                      >
+                        <Text style={[
+                          styles.optionText,
+                          localPersonalInfo.intermittent_fasting === option.value ? styles.selectedOptionText : {}
+                        ]}>
+                          {option.label}
+                          {localPersonalInfo.intermittent_fasting === option.value && ' ✓'}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
 
+              {/* Sleep Mask */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Sleep Mask</Text>
+                <TouchableOpacity 
+                  style={[
+                    styles.dropdownButton,
+                    localPersonalInfo.sleep_mask ? styles.dropdownButtonSelected : {}
+                  ]}
+                  onPress={() => setShowSleepMaskOptions(!showSleepMaskOptions)}
+                >
+                  <View style={styles.dropdownContent}>
+                    <Text style={styles.dropdownArrow}>{showSleepMaskOptions ? '▲' : '▼'}</Text>
+                    <Text style={[
+                      styles.dropdownButtonText,
+                      localPersonalInfo.sleep_mask ? styles.dropdownButtonTextSelected : {}
+                    ]}>
+                      {localPersonalInfo.sleep_mask ? 
+                        yesNoOptions.find(option => option.value === localPersonalInfo.sleep_mask)?.label || 'Please select' : 
+                        'Please select'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+                
+                {showSleepMaskOptions && (
+                  <View style={styles.optionsList}>
+                    {yesNoOptions.map((option) => (
+                      <TouchableOpacity
+                        key={option.value}
+                        style={[
+                          styles.optionItem,
+                          localPersonalInfo.sleep_mask === option.value ? styles.selectedOption : {}
+                        ]}
+                        onPress={() => handleSleepMaskSelect(option.value)}
+                      >
+                        <Text style={[
+                          styles.optionText,
+                          localPersonalInfo.sleep_mask === option.value ? styles.selectedOptionText : {}
+                        ]}>
+                          {option.label}
+                          {localPersonalInfo.sleep_mask === option.value && ' ✓'}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
 
-              
-              
+              {/* Seasonal Allergies */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Seasonal Allergies</Text>
+                <TouchableOpacity 
+                  style={[
+                    styles.dropdownButton,
+                    localPersonalInfo.seasonal_allergies ? styles.dropdownButtonSelected : {}
+                  ]}
+                  onPress={() => setShowSeasonalAllergiesOptions(!showSeasonalAllergiesOptions)}
+                >
+                  <View style={styles.dropdownContent}>
+                    <Text style={styles.dropdownArrow}>{showSeasonalAllergiesOptions ? '▲' : '▼'}</Text>
+                    <Text style={[
+                      styles.dropdownButtonText,
+                      localPersonalInfo.seasonal_allergies ? styles.dropdownButtonTextSelected : {}
+                    ]}>
+                      {localPersonalInfo.seasonal_allergies ? 
+                        yesNoOptions.find(option => option.value === localPersonalInfo.seasonal_allergies)?.label || 'Please select' : 
+                        'Please select'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+                
+                {showSeasonalAllergiesOptions && (
+                  <View style={styles.optionsList}>
+                    {yesNoOptions.map((option) => (
+                      <TouchableOpacity
+                        key={option.value}
+                        style={[
+                          styles.optionItem,
+                          localPersonalInfo.seasonal_allergies === option.value ? styles.selectedOption : {}
+                        ]}
+                        onPress={() => handleSeasonalAllergiesSelect(option.value)}
+                      >
+                        <Text style={[
+                          styles.optionText,
+                          localPersonalInfo.seasonal_allergies === option.value ? styles.selectedOptionText : {}
+                        ]}>
+                          {option.label}
+                          {localPersonalInfo.seasonal_allergies === option.value && ' ✓'}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              {/* Caffeine Consumption */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Caffeine Consumption</Text>
+                <TouchableOpacity 
+                  style={[
+                    styles.dropdownButton,
+                    localPersonalInfo.caffeine_consumption ? styles.dropdownButtonSelected : {}
+                  ]}
+                  onPress={() => setShowCaffeineConsumptionOptions(!showCaffeineConsumptionOptions)}
+                >
+                  <View style={styles.dropdownContent}>
+                    <Text style={styles.dropdownArrow}>{showCaffeineConsumptionOptions ? '▲' : '▼'}</Text>
+                    <Text style={[
+                      styles.dropdownButtonText,
+                      localPersonalInfo.caffeine_consumption ? styles.dropdownButtonTextSelected : {}
+                    ]}>
+                      {localPersonalInfo.caffeine_consumption ? 
+                        yesNoOptions.find(option => option.value === localPersonalInfo.caffeine_consumption)?.label || 'Please select' : 
+                        'Please select'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+                
+                {showCaffeineConsumptionOptions && (
+                  <View style={styles.optionsList}>
+                    {yesNoOptions.map((option) => (
+                      <TouchableOpacity
+                        key={option.value}
+                        style={[
+                          styles.optionItem,
+                          localPersonalInfo.caffeine_consumption === option.value ? styles.selectedOption : {}
+                        ]}
+                        onPress={() => handleCaffeineConsumptionSelect(option.value)}
+                      >
+                        <Text style={[
+                          styles.optionText,
+                          localPersonalInfo.caffeine_consumption === option.value ? styles.selectedOptionText : {}
+                        ]}>
+                          {option.label}
+                          {localPersonalInfo.caffeine_consumption === option.value && ' ✓'}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
             </ScrollView>
             
             <View style={styles.modalButtons}>
               <TouchableOpacity 
                 style={styles.autoFillButton} 
-                onPress={handleAutoFill}
-                disabled={isAutoFilling}
+                onPress={() => {
+                  // Arrays to store found activities by type
+                  const exerciseActivities = [];
+                  const relaxationActivities = [];
+                  let exerciseDuration = 0;
+                  let relaxationDuration = 0;
+                  let hasMindfulMinutes = false;
+                  
+                  // Check if there are activities in the training section
+                  if (garminData?.activity?.daily_activities && 
+                      garminData.activity.daily_activities.length > 0) {
+                        
+                    // Categorize activities
+                    garminData.activity.daily_activities.forEach(activity => {
+                      const activityType = activity.type.toLowerCase();
+                      
+                      // Check if it's a relaxation activity (yoga or meditation)
+                      if (activityType.includes('yoga') || 
+                          activityType.includes('meditation') || 
+                          activityType.includes('mindful')) {
+                        relaxationActivities.push(activity.type);
+                        relaxationDuration += activity.duration_minutes;
+                      } 
+                      // Otherwise, it's a regular exercise
+                      else {
+                        exerciseActivities.push(activity.type);
+                        exerciseDuration += activity.duration_minutes;
+                      }
+                    });
+                  }
+                  
+                  // Check for mindful minutes
+                  if (garminData?.activity?.mindful_minutes && 
+                      garminData.activity.mindful_minutes > 0) {
+                    hasMindfulMinutes = true;
+                    
+                    // Only add mindful minutes to duration if no meditation activities found
+                    if (!relaxationActivities.some(a => 
+                        a.toLowerCase().includes('meditation') || 
+                        a.toLowerCase().includes('mindful'))) {
+                      relaxationDuration += garminData.activity.mindful_minutes;
+                    }
+                  }
+                  
+                  // Update exercise data if found
+                  if (exerciseActivities.length > 0) {
+                    setDailySurveyResponses(prev => ({
+                      ...prev,
+                      exercise: true,
+                      exercise_type: exerciseActivities.join(", "),
+                      exercise_duration: exerciseDuration.toString()
+                    }));
+                  }
+                  
+                  // Update relaxation data if found
+                  if (relaxationActivities.length > 0 || hasMindfulMinutes) {
+                    const hasYoga = relaxationActivities.some(a => a.toLowerCase().includes('yoga'));
+                    const hasMeditation = relaxationActivities.some(a => 
+                      a.toLowerCase().includes('meditation') || 
+                      a.toLowerCase().includes('mindful')) || hasMindfulMinutes;
+                    
+                    setDailySurveyResponses(prev => ({
+                      ...prev,
+                      relaxation: true,
+                      relaxation_duration: relaxationDuration.toString(),
+                      relaxation_meditation: hasMeditation,
+                      relaxation_other: hasYoga,
+                      relaxation_other_text: hasYoga ? 'Yoga' : prev.relaxation_other_text
+                    }));
+                  }
+                  
+                  // Show message if no data found
+                  if (exerciseActivities.length === 0 && 
+                      relaxationActivities.length === 0 && 
+                      !hasMindfulMinutes) {
+                    Alert.alert(
+                      "No Activity Data",
+                      "No exercise or relaxation activities were found in your data."
+                    );
+                  }
+                }}
               >
-                <Text style={styles.modalButtonText}>
-                  {isAutoFilling ? "Auto-filling..." : "Autofill Health Data"}
-                </Text>
+                <Text style={styles.modalButtonText}>Autofill</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={styles.modalSubmitButton} 
-                onPress={handleSubmit}
-              >
+              
+              <TouchableOpacity style={styles.modalSubmitButton} onPress={submitSurvey}>
                 <Text style={styles.modalButtonText}>Submit</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
-    );
-  };
-
-  // Function to calculate fitness level from VO2 max, workouts, and activity data
-  const calculateFitnessLevel = (vo2MaxValue: number, workouts: any, distance: any) => {
-    console.log("🏋️‍♂️ Starting fitness level calculation with inputs:", {
-      vo2MaxValue,
-      workoutActiveMinutes: workouts?.activeMinutes,
-      distance: distance?.value
-    });
-
-    let fitnessScore = 5; // Start at average (5 on a 1-10 scale)
-    
-    // Factor 1: VO2 Max (weighted 50%)
-    let vo2Component = 5;
-    if (vo2MaxValue > 0) {
-      // Convert VO2 max to a 1-10 scale
-      if (vo2MaxValue < 25) vo2Component = 1;       // Very poor
-      else if (vo2MaxValue < 30) vo2Component = 2;  // Poor
-      else if (vo2MaxValue < 35) vo2Component = 3;  // Below average
-      else if (vo2MaxValue < 40) vo2Component = 4;  // Fair
-      else if (vo2MaxValue < 45) vo2Component = 5;  // Average
-      else if (vo2MaxValue < 50) vo2Component = 6;  // Above average
-      else if (vo2MaxValue < 55) vo2Component = 7;  // Good
-      else if (vo2MaxValue < 60) vo2Component = 8;  // Very good
-      else if (vo2MaxValue < 65) vo2Component = 9;  // Excellent
-      else vo2Component = 10;                       // Superior
-      
-      fitnessScore += (vo2Component - 5) * 0.5;
-      console.log(`📊 VO2 Max (${vo2MaxValue}): Contributes ${(vo2Component - 5) * 0.5} to score`);
-    } else {
-      console.log(`⚠️ No valid VO2 Max available`);
-    }
-
-    // Factor 2: Activity level from workouts (weighted 20%)
-    let workoutComponent = 5;
-    if (workouts && typeof workouts.activeMinutes === 'number') {
-      // Daily active minutes over 3 months
-      const avgDailyActive = workouts.activeMinutes / 90;
-      
-      // WHO recommends 150 min/week = ~21.4 min/day of moderate activity
-      if (avgDailyActive < 5) workoutComponent = 1;       // Very inactive
-      else if (avgDailyActive < 10) workoutComponent = 2; // Inactive
-      else if (avgDailyActive < 15) workoutComponent = 3; // Somewhat inactive
-      else if (avgDailyActive < 20) workoutComponent = 4; // Below recommendations
-      else if (avgDailyActive < 30) workoutComponent = 5; // Around recommendations
-      else if (avgDailyActive < 40) workoutComponent = 6; // Above recommendations
-      else if (avgDailyActive < 50) workoutComponent = 7; // Active
-      else if (avgDailyActive < 60) workoutComponent = 8; // Very active
-      else if (avgDailyActive < 70) workoutComponent = 9; // Highly active
-      else workoutComponent = 10;                         // Extremely active
-      
-      fitnessScore += (workoutComponent - 5) * 0.2;
-      console.log(`📊 Avg daily active minutes (${avgDailyActive.toFixed(1)}): Contributes ${(workoutComponent - 5) * 0.2} to score`);
-    } else {
-      console.log(`⚠️ No valid workout data available`);
-    }
-
-    // Factor 3: Daily steps and distance (weighted 30%)
-    let distanceComponent = 5;
-    if (distance && typeof distance.value === 'number') {
-      // Average daily distance in km over 3 months
-      const avgDailyDistance = distance.value / 90; 
-      // 5+ km daily is excellent (score 10), 0 km is poor (score 1)
-      distanceComponent = Math.min(10, Math.max(1, Math.round(avgDailyDistance / 0.5 * 10)));
-      fitnessScore += (distanceComponent - 5) * 0.3;
-      console.log(`📊 Avg daily distance (${avgDailyDistance.toFixed(2)} km): Contributes ${(distanceComponent - 5) * 0.3} to score`);
-    } else {
-      console.log(`⚠️ No valid distance data available`);
-    }
-
-    // Ensure score is between 1-10
-    const finalScore = Math.min(10, Math.max(1, Math.round(fitnessScore)));
-    console.log(`📊 Final fitness score: ${fitnessScore.toFixed(2)} (rounded to ${finalScore})`);
-    return finalScore;
-  };
-
-  // Function to calculate stress level from HRV and mindfulness data
-  const calculateStressLevel = (hrvData: any[], mindfulMinutes: number, sleepSamples: any[] = []) => {
-    console.log(`🧮 Calculating stress level from ${hrvData?.length || 0} HRV samples and ${mindfulMinutes} mindful minutes`);
-    
-    // Get detailed HRV analysis
-    const hrvAnalysis = analyzeHrvData(hrvData, sleepSamples);
-    
-    // Use the enhanced HRV data for stress calculation, weighing sleep HRV more heavily
-    let hrvStressScore = 0;
-    
-    if (hrvAnalysis.sleep.avg > 0 || hrvAnalysis.awake.avg > 0) {
-      // Weighted average: 70% sleep HRV, 30% awake HRV
-      const weightedHrvAvg = hrvAnalysis.sleep.avg > 0 && hrvAnalysis.awake.avg > 0 ?
-        (hrvAnalysis.sleep.avg * 0.7) + (hrvAnalysis.awake.avg * 0.3) :
-        hrvAnalysis.sleep.avg > 0 ? hrvAnalysis.sleep.avg : hrvAnalysis.awake.avg;
-      
-      // Consider sleep phase HRV if available (particularly REM and DEEP which are important for recovery)
-      let phaseBonus = 0;
-      if (hrvAnalysis.sleep.phases.REM > 0 && hrvAnalysis.sleep.phases.DEEP > 0) {
-        const phaseAvg = (hrvAnalysis.sleep.phases.REM + hrvAnalysis.sleep.phases.DEEP) / 2;
-        phaseBonus = phaseAvg > weightedHrvAvg ? 1 : 0; // Bonus if deep sleep HRV is good
-      }
-      
-      // Higher HRV is better (lower stress)
-      // Map HRV to stress scale (10-80ms → 10-1 stress)
-      hrvStressScore = weightedHrvAvg < 10 ? 10 : 
-                      weightedHrvAvg > 80 ? 1 : 
-                      11 - Math.round((weightedHrvAvg - 10) / 7);
-      
-      // Apply phase bonus if applicable (can reduce stress by 1 point)
-      hrvStressScore = Math.max(1, hrvStressScore - phaseBonus);
-    } else {
-      // No HRV data, default to moderate stress
-      hrvStressScore = 5;
-    }
-    
-    // Mindfulness component (more minutes = less stress)
-    const mindfulnessScore = mindfulMinutes >= 60 ? 1 : 
-                            mindfulMinutes >= 30 ? 2 :
-                            mindfulMinutes >= 15 ? 3 :
-                            mindfulMinutes >= 5 ? 4 : 5;
-    
-    // Final stress score combines HRV (75%) and mindfulness (25%)
-    const finalStressScore = Math.round((hrvStressScore * 0.75) + (mindfulnessScore * 0.25));
-    
-    // Ensure result is in 1-10 range
-    return Math.max(1, Math.min(10, finalStressScore));
-  };
-
-  // Function to calculate sleep quality from sleep data
-  const calculateSleepQuality = (sleepSamples: any[]) => {
-    console.log("😴 Starting sleep quality calculation with inputs:", {
-      sleepSamplesLength: sleepSamples?.length
-    });
-    
-    let sleepScore = 5; // Start at average
-    
-    if (!sleepSamples || sleepSamples.length === 0) {
-      console.log(`⚠️ No sleep samples available`);
-      return sleepScore; // Return average if no data
-    }
-
-    // Group sleep samples by day
-    const sleepByDay: Record<string, any[]> = {};
-    
-    sleepSamples.forEach(sample => {
-      const date = new Date(sample.startDate).toISOString().split('T')[0];
-      if (!sleepByDay[date]) {
-        sleepByDay[date] = [];
-      }
-      sleepByDay[date].push(sample);
-    });
-    
-    const numDays = Object.keys(sleepByDay).length;
-    console.log(`📊 Found sleep data for ${numDays} unique days`);
-
-    if (numDays === 0) {
-      console.log(`⚠️ No days with sleep data`);
-      return sleepScore;
-    }
-
-    // For simplicity, we'll analyze the average sleep duration and quality
-    let totalSleepMinutes = 0;
-    let totalDeepSleepMinutes = 0;
-    let totalRemSleepMinutes = 0;
-    let daysWithData = 0;
-
-    for (const date in sleepByDay) {
-      const dayData = sleepByDay[date];
-      let daySleepMinutes = 0;
-      let dayDeepSleepMinutes = 0;
-      let dayRemSleepMinutes = 0;
-      
-      dayData.forEach(sample => {
-        if (!sample.startDate || !sample.endDate) return;
-        
-        const start = new Date(sample.startDate);
-        const end = new Date(sample.endDate);
-        const durationMin = (end.getTime() - start.getTime()) / (1000 * 60);
-        
-        // Count only actual sleep stages, not just in bed
-        if (sample.value === 'ASLEEP' || sample.value === 'CORE' || sample.value === 'DEEP' || sample.value === 'REM') {
-          daySleepMinutes += durationMin;
-          
-          // Categorize sleep types
-          if (sample.value === 'DEEP') {
-            dayDeepSleepMinutes += durationMin;
-          } else if (sample.value === 'REM') {
-            dayRemSleepMinutes += durationMin;
-          } 
-        }
-      });
-      
-      // Only count days with significant sleep data
-      if (daySleepMinutes > 120) { // At least 2 hours
-        totalSleepMinutes += daySleepMinutes;
-        totalDeepSleepMinutes += dayDeepSleepMinutes;
-        totalRemSleepMinutes += dayRemSleepMinutes;
-        daysWithData++;
-      }
-    }
-    
-    if (daysWithData === 0) {
-      console.log(`⚠️ No days with sufficient sleep data`);
-      return sleepScore;
-    }
-    
-    // Calculate averages
-    const avgSleepHours = (totalSleepMinutes / daysWithData) / 60;
-    const deepSleepPercentage = (totalDeepSleepMinutes / totalSleepMinutes) * 100;
-    const remSleepPercentage = (totalRemSleepMinutes / totalSleepMinutes) * 100;
-    
-    console.log(`📊 Average sleep: ${avgSleepHours.toFixed(2)} hours`);
-    console.log(`📊 Deep sleep: ${deepSleepPercentage.toFixed(2)}%`);
-    console.log(`📊 REM sleep: ${remSleepPercentage.toFixed(2)}%`);
-    
-    // Factor 1: Sleep duration (weight 40%)
-    let durationComponent = 5;
-    if (avgSleepHours < 5) durationComponent = 1;        // Very poor
-    else if (avgSleepHours < 6) durationComponent = 3;   // Below average
-    else if (avgSleepHours < 7) durationComponent = 5;   // Average
-    else if (avgSleepHours < 8) durationComponent = 8;   // Good
-    else if (avgSleepHours < 9) durationComponent = 10;  // Excellent
-    else if (avgSleepHours < 10) durationComponent = 7;  // Good but too much
-    else durationComponent = 5;                          // Too much sleep
-    
-    console.log(`📊 Sleep duration component (${durationComponent}): Contributes ${(durationComponent - 5) * 0.4} to score`);
-    sleepScore += (durationComponent - 5) * 0.4;
-    
-    // Factor 2: Deep sleep percentage (weight 35%)
-    let deepSleepComponent = 5;
-    if (deepSleepPercentage < 10) deepSleepComponent = 1;        // Very poor
-    else if (deepSleepPercentage < 15) deepSleepComponent = 3;   // Below average
-    else if (deepSleepPercentage < 20) deepSleepComponent = 6;   // Good
-    else if (deepSleepPercentage < 25) deepSleepComponent = 9;   // Very good
-    else if (deepSleepPercentage < 30) deepSleepComponent = 10;  // Excellent
-    else deepSleepComponent = 7;                                 // Too much
-    
-    console.log(`📊 Deep sleep component (${deepSleepComponent}): Contributes ${(deepSleepComponent - 5) * 0.35} to score`);
-    sleepScore += (deepSleepComponent - 5) * 0.35;
-    
-    // Factor 3: REM sleep percentage (weight 25%)
-    let remSleepComponent = 5;
-    if (remSleepPercentage < 10) remSleepComponent = 1;        // Very poor
-    else if (remSleepPercentage < 15) remSleepComponent = 3;   // Below average
-    else if (remSleepPercentage < 20) remSleepComponent = 6;   // Good
-    else if (remSleepPercentage < 25) remSleepComponent = 9;   // Very good
-    else if (remSleepPercentage < 30) remSleepComponent = 10;  // Excellent
-    else remSleepComponent = 7;                               // Too much
-    
-    console.log(`📊 REM sleep component (${remSleepComponent}): Contributes ${(remSleepComponent - 5) * 0.25} to score`);
-    sleepScore += (remSleepComponent - 5) * 0.25;
-    
-    // Ensure sleep score is between 1 and 10
-    const finalScore = Math.min(10, Math.max(1, Math.round(sleepScore)));
-    console.log(`📊 Final sleep quality score: ${sleepScore.toFixed(2)} (rounded to ${finalScore})`);
-    
-    return finalScore;
-  };
-
-  // Add this function after calculateSleepQuality
-  const ensureHealthMetrics = (data: {
-    fitness_level?: number | null; 
-    stress_level?: number | null; 
-    sleep_quality?: number | null;
-  }) => {
-    // Ensure we have non-null values for all health metrics
-    return {
-      fitness_level: data.fitness_level !== null && data.fitness_level !== undefined ? data.fitness_level : 5,
-      stress_level: data.stress_level !== null && data.stress_level !== undefined ? data.stress_level : 5,
-      sleep_quality: data.sleep_quality !== null && data.sleep_quality !== undefined ? data.sleep_quality : 5
-    };
-  };
-
-  // Add new function to analyze HRV data in detail
-  const analyzeHrvData = (hrvData: any[], sleepSamples: any[]) => {
-    if (!hrvData || hrvData.length === 0) {
-      console.log("❌ No HRV data available for analysis");
-      return {
-        sleep: { min: 0, max: 0, avg: 0, phases: { REM: 0, DEEP: 0, CORE: 0 } },
-        awake: { min: 0, max: 0, avg: 0 }
-      };
-    }
-
-    console.log(`💓 Analyzing ${hrvData.length} HRV samples with ${sleepSamples?.length || 0} sleep samples`);
-    
-    // Create map of sleep periods
-    const sleepPeriods: Map<string, { 
-      start: Date, 
-      end: Date, 
-      phase: string 
-    }> = new Map();
-    
-    if (sleepSamples && sleepSamples.length > 0) {
-      sleepSamples.forEach(sample => {
-        if (sample.startDate && sample.endDate) {
-          const key = `${sample.startDate}_${sample.endDate}`;
-          sleepPeriods.set(key, {
-            start: new Date(sample.startDate),
-            end: new Date(sample.endDate),
-            phase: sample.value // INBED, ASLEEP, AWAKE, CORE, DEEP, REM
-          });
-        }
-      });
-      console.log(`💤 Created map of ${sleepPeriods.size} sleep periods`);
-    }
-    
-    // Separate HRV samples by sleep state
-    const sleepHrv: any[] = [];
-    const awakeHrv: any[] = [];
-    
-    // Track HRV by sleep phase
-    const phaseHrv: { [key: string]: number[] } = {
-      'REM': [],
-      'DEEP': [],
-      'CORE': []
-    };
-    
-    hrvData.forEach(sample => {
-      const sampleTime = new Date(sample.startDate);
-      let isSleeping = false;
-      let sleepPhase = '';
-      
-      // Check if this HRV sample falls within any sleep period
-      sleepPeriods.forEach(period => {
-        if (sampleTime >= period.start && sampleTime <= period.end) {
-          isSleeping = true;
-          sleepPhase = period.phase;
-        }
-      });
-      
-      if (isSleeping) {
-        sleepHrv.push(sample);
-        
-        // Add to phase-specific array if it's one of our tracked phases
-        if (sleepPhase in phaseHrv) {
-          phaseHrv[sleepPhase].push(sample.value);
-        }
-      } else {
-        awakeHrv.push(sample);
-      }
-    });
-    
-    console.log(`💓 Separated HRV data: ${sleepHrv.length} sleep samples, ${awakeHrv.length} awake samples`);
-    
-    // Calculate statistics for sleep HRV
-    const sleepHrvValues = sleepHrv.map(s => s.value);
-    const sleepStats = {
-      min: sleepHrvValues.length > 0 ? Math.min(...sleepHrvValues) : 0,
-      max: sleepHrvValues.length > 0 ? Math.max(...sleepHrvValues) : 0,
-      avg: sleepHrvValues.length > 0 ? 
-        sleepHrvValues.reduce((sum, val) => sum + val, 0) / sleepHrvValues.length : 0
-    };
-    
-    // Calculate statistics for awake HRV
-    const awakeHrvValues = awakeHrv.map(s => s.value);
-    const awakeStats = {
-      min: awakeHrvValues.length > 0 ? Math.min(...awakeHrvValues) : 0,
-      max: awakeHrvValues.length > 0 ? Math.max(...awakeHrvValues) : 0,
-      avg: awakeHrvValues.length > 0 ? 
-        awakeHrvValues.reduce((sum, val) => sum + val, 0) / awakeHrvValues.length : 0
-    };
-    
-    // Calculate average HRV by sleep phase
-    const phaseStats: { [key: string]: number } = {};
-    Object.keys(phaseHrv).forEach(phase => {
-      const values = phaseHrv[phase];
-      phaseStats[phase] = values.length > 0 ? 
-        values.reduce((sum, val) => sum + val, 0) / values.length : 0;
-    });
-    
-    // Log the detailed HRV analysis
-    console.log("💓 HRV Analysis Results:", {
-      sleep: { ...sleepStats, phases: phaseStats },
-      awake: awakeStats
-    });
-    
-    return {
-      sleep: { ...sleepStats, phases: phaseStats },
-      awake: awakeStats
-    };
-  };
-
-  return (
-    <View style={styles.container}>
-      <View style={styles.sectionTitle}>
-      <Text style={styles.sectionTitle}>Welcome {personalInfo.firstname}! </Text>
-        <View style={styles.headerButtons}>
-          <TouchableOpacity
-            style={styles.refreshButton}
-            onPress={() => {
-              if (dataSource === 'apple') {
-                fetchHRVData();
-              } else if (dataSource === 'garmin') {
-                checkLogin();
-              }
-            }}
-          >
-            <Text style={styles.refreshButtonText}>↻</Text>
-          </TouchableOpacity>
-
-          {dataSource === 'garmin' && (
-            <TouchableOpacity
-              style={[styles.garminButton, styles.sourceButton]}
-                onPress={() => setGarminModalVisible(true)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.sourceButtonText}>Change Login</Text>
-            </TouchableOpacity>
-          )}
-
-          <TouchableOpacity
-            style={styles.sourceButton}
-            onPress={() => {
-              const newSource = dataSource === 'apple' ? 'garmin' : 'apple';
-              handleSourceChange(newSource);
-            }}
-          >
-            <Text style={styles.sourceButtonText}>
-              {dataSource === 'apple' ? 'Connect Garmin Watch' : 'Connect Apple Watch'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-      
-      {loading ? (
-        <ActivityIndicator size="large" color="#0000ff" />
-      ) : (
-        <ScrollView 
-          style={styles.scrollView} 
-          showsVerticalScrollIndicator={true}
-          contentContainerStyle={styles.scrollViewContent}
-        >
-          {healthKitAvailable && dataSource === 'apple' && (
-            <Text style={styles.healthKitStatus}>Apple HealthKit verbunden</Text>
-          )}
-
-         
-
-<View style={styles.buttonContainer}>
-            
-
-            <TouchableOpacity 
-              style={[
-                styles.button,
-                personalInfoSubmitted ? styles.buttonPressed : {}
-              ]}
-              onPress={handlePersonalInfoButtonPress}
-            >
-              <View style={styles.buttonWithCheckbox}>
-                <Text style={styles.buttonText}>Personal Information</Text>
-                {personalInfoSubmitted && <Text style={styles.checkmark}>✓</Text>}
-              </View>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[
-                styles.button,
-                historyDataUploaded ? styles.buttonPressed : {}
-              ]}
-              onPress={async () => {
-                // Retrieve credentials before the function call
-                const storedEmail = email || await SecureStore.getItemAsync("garmin_email") || "";
-                const storedPassword = password || await SecureStore.getItemAsync("garmin_password") || "";
-                
-                const uploadSuccess = await uploadHistoricalData(
-                  db, 
-                  getOrCreateDeviceId, 
-                  setLoading,
-                  dataSource,
-                  async (email, password, date) => {
-                    // Create a function to fetch Garmin data for a specific date
-                    try {
-                      console.log(`Fetching historical data for date: ${date}`);
-                      const requestBody = { 
-                        email: email, 
-                        password: password, 
-                        date: date 
-                      };
-                      
-                      const API_URL = Constants.expoConfig?.extra?.apiUrl || 'https://dodo-holy-primarily.ngrok-free.app';
-                      const response = await fetch(`${API_URL}/all_data`, {
-                        method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(requestBody),
-                      });
-                      
-                      if (!response.ok) {
-                        throw new Error(`Server error: ${response.status}`);
-                      }
-                      
-                      const data = await response.json();
-                      console.log(`Successfully received data for ${date}`);
-                      return data;
-                    } catch (error) {
-                      console.error(`Error fetching Garmin data for ${date}:`, error);
-                      throw error;
-                    }
-                  },
-                  healthKitAvailable,
-                  {
-                    email: storedEmail,
-                    password: storedPassword
-                  }
-                );
-                
-                // Only set the uploaded flag if the upload was successful
-                if (uploadSuccess) {
-                  setHistoryDataUploaded(true);
-                }
-              }}
-            >
-              <View style={styles.buttonWithCheckbox}>
-                <Text style={styles.buttonText}>Upload Historical Data</Text>
-                {historyDataUploaded && <Text style={styles.checkmark}>✓</Text>}
-              </View>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[
-                styles.button, 
-                surveySubmitted ? styles.buttonPressed : {},
-                !personalInfoSubmitted ? styles.buttonDisabled : {}
-              ]}
-              onPress={personalInfoSubmitted ? handlePssButtonPress : () => {
-                Alert.alert(
-                  "Information Required",
-                  "Please fill out your personal information first before taking the daily survey."
-                );
-              }}
-            >
-              <View style={styles.buttonWithCheckbox}>
-                <Text style={[
-                  styles.buttonText,
-                  !personalInfoSubmitted ? styles.buttonTextDisabled : {}
-                ]}>Daily Survey</Text>
-                {surveySubmitted && <Text style={styles.checkmark}>✓</Text>}
-              </View>
-            </TouchableOpacity>
-          </View>
-          
-          {/* Add notification time picker component */}
-          <NotificationTimePicker 
-            onTimeSet={(hour, minute) => {
-              console.log(`Notification time set to ${hour}:${minute}`);
-            }}
-            onSubmit={() => {
-              console.log('Notification time picker submitted');
-              // Could add additional state management here if needed
-            }}
-          />
-
-          {/* Sleep Section */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Sleep Analysis</Text>
-            <View style={styles.hrvSummary}>
-            {/* Sleep Summary */}
-            {garminData?.sleep?.summary ? (
-              <>
-                <View style={styles.sleepSummary}>
-                  <Text style={styles.sleepTime}>
-                    {garminData.sleep.summary.sleep_start ? 
-                      new Date(garminData.sleep.summary.sleep_start).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) :
-                      'N/A'} 
-                    {' - '}
-                    {garminData.sleep.summary.sleep_end ? 
-                      new Date(garminData.sleep.summary.sleep_end).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) :
-                      'N/A'}
-                  </Text>
-                  
-                  <View style={styles.row}>
-                    <Text style={styles.label}>Total Sleep:</Text>
-                    <Text style={styles.value}>
-                      {formatDuration(garminData.sleep.summary.total_sleep_seconds)}
-                    </Text>
-                  </View>
-                  
-                  <View style={styles.row}>
-                    <Text style={styles.label}>Deep Sleep:</Text>
-                    <Text style={styles.value}>
-                      {formatDuration(garminData.sleep.summary.deep_sleep_seconds)}
-                    </Text>
-                  </View>
-                  
-                  <View style={styles.row}>
-                    <Text style={styles.label}>Light Sleep:</Text>
-                    <Text style={styles.value}>
-                      {formatDuration(garminData.sleep.summary.light_sleep_seconds)}
-                    </Text>
-                  </View>
-                  
-                  <View style={styles.row}>
-                    <Text style={styles.label}>REM Sleep:</Text>
-                    <Text style={styles.value}>
-                      {formatDuration(garminData.sleep.summary.rem_sleep_seconds)}
-                    </Text>
-                  </View>
-                  
-                  <View style={styles.row}>
-                    <Text style={styles.label}>Awake Time:</Text>
-                    <Text style={styles.value}>
-                      {formatDuration(garminData.sleep.summary.awake_seconds)}
-                    </Text>
-                  </View>
-
-                  <View style={styles.row}>
-                    <Text style={styles.label}>Sleep Score:</Text>
-                    <Text style={styles.value}>
-                      {garminData.sleep.summary.sleep_score || 'N/A'}
-                    </Text>
-                  </View>
-                </View>
-                
-              </>
-            ) : (
-              <Text style={styles.noData}>No sleep data available</Text>
-            )}
-            </View>
-          </View>
-
-          {/* Activity Section */}
-          
-          {garminData.activity && (
-            <View style={styles.sectionTitle}>
-              <Text style={styles.sectionTitle}>Activity</Text>
-              <View style={styles.hrvSummary}>
-              <View style={styles.dataRow}>
-                <Text style={styles.dataLabel}>Steps:</Text>
-                <Text style={styles.dataValue}>{garminData.activity.steps || 'N/A'}</Text>
-              </View>
-              <View style={styles.dataRow}>
-                <Text style={styles.dataLabel}>Calories:</Text>
-                <Text style={styles.dataValue}>{garminData.activity.calories_burned || 'N/A'}</Text>
-              </View>
-              <View style={styles.dataRow}>
-                <Text style={styles.dataLabel}>Active Minutes:</Text>
-                <Text style={styles.dataValue}>{garminData.activity.active_minutes || 'N/A'}</Text>
-              </View>
-              <View style={styles.dataRow}>
-                <Text style={styles.dataLabel}>Distance:</Text>
-                <Text style={styles.dataValue}>{garminData.activity.distance_km?.toFixed(1) || 'N/A'} km</Text>
-              </View>
-              <View style={styles.dataRow}>
-                <Text style={styles.dataLabel}>Mindful Minutes:</Text>
-                <Text style={styles.dataValue}>{garminData.activity.mindful_minutes !== undefined && garminData.activity.mindful_minutes !== null ? garminData.activity.mindful_minutes : 'N/A'}</Text>
-              </View>
-              <View style={styles.row}>
-                <Text style={styles.label}>VO2 Max:</Text>
-                <Text style={styles.value}>
-                  {garminData.activity.vo2_max > 0 ? 
-                    `${garminData.activity.vo2_max.toFixed(1)} (${garminData.activity.vo2_max_status})` : 
-                    'N/A'}
-                </Text>
-              </View>
-              {garminData.activity.vo2_max > 0 && (
-                <View style={styles.subRow}>
-                  <Text style={styles.subText}>
-                    Measured on: {garminData.activity.vo2_max_date}
-                  </Text>
-                </View>
-              )}
-              </View>
-            </View>
-          )}
-
-  
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Training</Text>
-            {garminData?.activity?.daily_activities ? (
-              garminData.activity.daily_activities.length > 0 ? (
-              garminData.activity.daily_activities.map((activity, index) => (
-                <View key={index} style={styles.activityRow}>
-                  <Text style={styles.activityType}>{activity.type}</Text>
-                  <Text style={styles.activityDuration}>{activity.duration_minutes} min</Text>
-                </View>
-              ))
-            ) : (
-              <Text style={styles.noActivities}>No activities recorded yesterday</Text>
-              )
-            ) : (
-              <Text style={styles.noActivities}>No activities data available</Text>
-            )}
-          </View>
-
-          {/* New HRV Section */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Heart Rate Variability</Text>
-            {garminData?.hrv ? (
-              <>
-                <View style={styles.hrvSummary}>
-                  <View style={styles.row}>
-                    <Text style={styles.label}>Night Average:</Text>
-                    <Text style={styles.value}>
-                      {garminData.hrv.summary.lastNightAvg ? 
-                        `${garminData.hrv.summary.lastNightAvg} ms` : 
-                        'N/A'}
-                    </Text>
-                  </View>
-                  <View style={styles.row}>
-                    <Text style={styles.label}>Highest 5-min:</Text>
-                    <Text style={styles.value}>
-                      {garminData.hrv.summary.lastNight5MinHigh ? 
-                        `${garminData.hrv.summary.lastNight5MinHigh} ms` : 
-                        'N/A'}
-                    </Text>
-                  </View>
-                </View>
-
-                {garminData.hrv.readings.length > 0 && (
-                  <>
-                    <Text style={styles.subsectionTitle}>HRV Timeline</Text>
-                    <ScrollView 
-                      horizontal={true} 
-                      style={styles.hrvReadingsContainer}
-                      showsHorizontalScrollIndicator={false}
-                    >
-                      {garminData.hrv.readings.map((reading, index) => (
-                        <View key={index} style={styles.hrvReading}>
-                          <Text style={styles.hrvValue}>
-                            {reading.value} ms
-                          </Text>
-                          <Text style={styles.hrvTime}>
-                            {new Date(reading.time).toLocaleTimeString([], {
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}
-                          </Text>
-                        </View>
-                      ))}
-                    </ScrollView>
-                  </>
-                )}
-              </>
-            ) : (
-              <Text style={styles.noData}>No HRV data available</Text>
-            )}
-          </View>
-
-          
-        </ScrollView>
-      )}
-
-      {/* Garmin Login Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={garminModalVisible}
-        onRequestClose={() => setGarminModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Garmin Login</Text>
-              <TouchableOpacity onPress={() => setGarminModalVisible(false)}>
-                <Text style={styles.closeButton}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            <TextInput
-              style={styles.input}
-              placeholder="Email"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Password"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-            />
-            <TouchableOpacity style={styles.button} onPress={handleLogin}>
-              <Text style={styles.buttonText}>Login</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* PSS Survey Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={pssModalVisible}
-        onRequestClose={() => setPssModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Daily Survey</Text>
-              <TouchableOpacity onPress={() => setPssModalVisible(false)}>
-                <Text style={styles.closeButton}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            <ScrollView>
-            <FlatList
-              data={questions}
-              keyExtractor={(item, index) => index.toString()}
-              renderItem={({ item, index }) => (
-                <View style={styles.questionContainer}>
-                  <Text style={styles.questionText}>{item}</Text>
-                  <View style={styles.likertContainer}>
-                    {getOptionsForQuestion(index).map((option) => (
-                      <TouchableOpacity
-                        key={option.value}
-                        style={[
-                            styles.optionWrapper,
-                            index === 0 ? { width: '9%' } : { width: '19%' }
-                        ]}
-                        onPress={() => handleResponseChange(option.value, index)}
-                      >
-                          <View
-                            style={[
-                              styles.circleOption,
-                              index === 0 ? { 
-                                width: 15, 
-                                height: 15, 
-                                borderRadius: 7.5 
-                              } : {},
-                              responses[index] === option.value && styles.circleSelected
-                            ]}
-                          >
-                            {responses[index] === option.value && (
-                              <View 
-                                style={[
-                                  styles.innerCircle,
-                                  index === 0 ? { 
-                                    width: 7, 
-                                    height: 7, 
-                                    borderRadius: 3.5 
-                                  } : {}
-                                ]} 
-                              />
-                            )}
-                          </View>
-                          <Text
-                            style={[
-                              styles.optionLabel,
-                              index === 0 ? { fontSize: 8 } : {},
-                              responses[index] === option.value && styles.labelSelected
-                            ]}
-                          >
-                          {option.label}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                    {index === 3 && responses[index] === 5 && (
-                      <View style={{marginTop: 10}}>
-                        <TextInput
-                          style={styles.input}
-                          placeholder="Please specify..."
-                          value={otherText}
-                          onChangeText={setOtherText}
-                        />
-                </View>
-              )}
-                  </View>
-                )}
-                scrollEnabled={false}
-              />
-              
-              <View style={styles.dailySurveyContainer}>
-                <Text style={styles.sectionTitle}>What happened yesterday?</Text>
-                
-                {/* Morning Sunlight */}
-                <View style={styles.yesNoQuestion}>
-                  <Text style={styles.questionText}>☀️ Got morning sunlight (within 15min of waking)?</Text>
-                  <TouchableOpacity 
-                    style={[
-                      styles.toggleButton, 
-                      dailySurveyResponses.morning_sunlight && styles.toggleButtonActive
-                    ]}
-                    onPress={() => setDailySurveyResponses(prev => ({...prev, morning_sunlight: !prev.morning_sunlight}))}
-                  >
-                    <Text style={[
-                      styles.toggleButtonText, 
-                      dailySurveyResponses.morning_sunlight && styles.toggleButtonTextActive
-                    ]}>
-                      {dailySurveyResponses.morning_sunlight ? 'Yes' : 'No'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* Seasonal Allergies - only show if user has seasonal allergies */}
-                {personalInfo.seasonal_allergies === 'yes' && (
-                <View style={styles.yesNoQuestion}>
-                  <Text style={styles.questionText}>🤧 Seasonal allergies?</Text>
-                  <TouchableOpacity 
-                    style={[
-                      styles.toggleButton, 
-                      dailySurveyResponses.seasonal_allergies && styles.toggleButtonActive
-                    ]}
-                    onPress={() => setDailySurveyResponses(prev => ({...prev, seasonal_allergies: !prev.seasonal_allergies}))}
-                  >
-                    <Text style={[
-                      styles.toggleButtonText, 
-                      dailySurveyResponses.seasonal_allergies && styles.toggleButtonTextActive
-                    ]}>
-                      {dailySurveyResponses.seasonal_allergies ? 'Yes' : 'No'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-                )}
-                
-                {/* Sick Today */}
-                <View style={styles.yesNoQuestion}>
-                  <Text style={styles.questionText}>🤒 Felt sick?</Text>
-                  <TouchableOpacity 
-                    style={[
-                      styles.toggleButton, 
-                      dailySurveyResponses.sick && styles.toggleButtonActive
-                    ]}
-                    onPress={() => setDailySurveyResponses(prev => ({...prev, sick: !prev.sick}))}
-                  >
-                    <Text style={[
-                      styles.toggleButtonText, 
-                      dailySurveyResponses.sick && styles.toggleButtonTextActive
-                    ]}>
-                      {dailySurveyResponses.sick ? 'Yes' : 'No'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-                
-                {/* Caffeine - only show if user consumes caffeine */}
-                {personalInfo.caffeine_consumption === 'yes' && (
-                <View style={styles.yesNoQuestion}>
-                  <Text style={styles.questionText}>☕ Consumed caffeine after noon?</Text>
-                  <TouchableOpacity 
-                    style={[
-                      styles.toggleButton, 
-                      dailySurveyResponses.caffeine && styles.toggleButtonActive
-                    ]}
-                    onPress={() => setDailySurveyResponses(prev => ({...prev, caffeine: !prev.caffeine}))}
-                  >
-                    <Text style={[
-                      styles.toggleButtonText, 
-                      dailySurveyResponses.caffeine && styles.toggleButtonTextActive
-                    ]}>
-                      {dailySurveyResponses.caffeine ? 'Yes' : 'No'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-                )}
-
-                
-                
-                {/* 3L Water */}
-                <View style={styles.yesNoQuestion}>
-                  <Text style={styles.questionText}>💧 Drank more than 3L of water?</Text>
-                  <TouchableOpacity 
-                    style={[
-                      styles.toggleButton, 
-                      dailySurveyResponses.water_3l && styles.toggleButtonActive
-                    ]}
-                    onPress={() => setDailySurveyResponses(prev => ({...prev, water_3l: !prev.water_3l}))}
-                  >
-                    <Text style={[
-                      styles.toggleButtonText, 
-                      dailySurveyResponses.water_3l && styles.toggleButtonTextActive
-                    ]}>
-                      {dailySurveyResponses.water_3l ? 'Yes' : 'No'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-                
-                {/* Processed Food */}
-                <View style={styles.yesNoQuestion}>
-                  <Text style={styles.questionText}>🍔 Ate processed food?</Text>
-                  <TouchableOpacity 
-                    style={[
-                      styles.toggleButton, 
-                      dailySurveyResponses.processed_food && styles.toggleButtonActive
-                    ]}
-                    onPress={() => setDailySurveyResponses(prev => ({...prev, processed_food: !prev.processed_food}))}
-                  >
-                    <Text style={[
-                      styles.toggleButtonText, 
-                      dailySurveyResponses.processed_food && styles.toggleButtonTextActive
-                    ]}>
-                      {dailySurveyResponses.processed_food ? 'Yes' : 'No'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* Only show meditation question if they practice meditation */}
-                {personalInfo.meditation === 'yes' && (
-                  <View style={styles.yesNoQuestion}>
-                    <Text style={styles.questionText}>🧘 Meditate?</Text>
-                    <TouchableOpacity 
-                      style={[
-                        styles.toggleButton, 
-                        dailySurveyResponses.meditation && styles.toggleButtonActive
-                      ]}
-                      onPress={() => setDailySurveyResponses(prev => ({...prev, meditation: !prev.meditation}))}
-                    >
-                      <Text style={[
-                        styles.toggleButtonText, 
-                        dailySurveyResponses.meditation && styles.toggleButtonTextActive
-                      ]}>
-                        {dailySurveyResponses.meditation ? 'Yes' : 'No'}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-                
-                {/* Exercise */}
-                <View style={styles.yesNoQuestion}>
-                  <Text style={styles.questionText}>🏋️‍♀️ Exercised?</Text>
-                  <TouchableOpacity 
-                    style={[
-                      styles.toggleButton, 
-                      dailySurveyResponses.exercise && styles.toggleButtonActive
-                    ]}
-                    onPress={() => setDailySurveyResponses(prev => ({...prev, exercise: !prev.exercise}))}
-                  >
-                    <Text style={[
-                      styles.toggleButtonText, 
-                      dailySurveyResponses.exercise && styles.toggleButtonTextActive
-                    ]}>
-                      {dailySurveyResponses.exercise ? 'Yes' : 'No'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-                
-                {/* Exercise follow-up questions - only show when exercise is true */}
-                {dailySurveyResponses.exercise && (
-                  <View style={styles.subQuestionContainer}>
-                    <View style={styles.formGroup}>
-                      <Text style={styles.subQuestionText}>What did you do?</Text>
-                      <TextInput
-                        style={styles.input}
-                        placeholder="Type of exercise"
-                        value={dailySurveyResponses.exercise_type}
-                        onChangeText={(text) => setDailySurveyResponses(prev => ({...prev, exercise_type: text}))}
-                      />
-                    </View>
-                    
-                    <View style={styles.formGroup}>
-                      <Text style={styles.subQuestionText}>How long? (minutes)</Text>
-                      <TextInput
-                        style={styles.input}
-                        placeholder="Duration in minutes"
-                        keyboardType="number-pad"
-                        value={dailySurveyResponses.exercise_duration}
-                        onChangeText={(text) => setDailySurveyResponses(prev => ({...prev, exercise_duration: text}))}
-                      />
-                    </View>
-                  </View>
-                )}
-                
-                {/* Met Friends */}
-                <View style={styles.yesNoQuestion}>
-                  <Text style={styles.questionText}>👥 Met close friends?</Text>
-                  <TouchableOpacity 
-                    style={[
-                      styles.toggleButton, 
-                      dailySurveyResponses.met_friends && styles.toggleButtonActive
-                    ]}
-                    onPress={() => setDailySurveyResponses(prev => ({...prev, met_friends: !prev.met_friends}))}
-                  >
-                    <Text style={[
-                      styles.toggleButtonText, 
-                      dailySurveyResponses.met_friends && styles.toggleButtonTextActive
-                    ]}>
-                      {dailySurveyResponses.met_friends ? 'Yes' : 'No'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-                
-                {/* Relaxation Techniques */}
-                <View style={styles.yesNoQuestion}>
-                  <Text style={styles.questionText}>🧘‍♂️ Engaged in relaxation techniques?</Text>
-                  <TouchableOpacity 
-                    style={[
-                      styles.toggleButton, 
-                      dailySurveyResponses.relaxation && styles.toggleButtonActive
-                    ]}
-                    onPress={() => setDailySurveyResponses(prev => ({...prev, relaxation: !prev.relaxation}))}
-                  >
-                    <Text style={[
-                      styles.toggleButtonText, 
-                      dailySurveyResponses.relaxation && styles.toggleButtonTextActive
-                    ]}>
-                      {dailySurveyResponses.relaxation ? 'Yes' : 'No'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-                
-                {/* Relaxation type options - only show when relaxation is true */}
-                {dailySurveyResponses.relaxation && (
-                  <View style={styles.subQuestionContainer}>
-                    <Text style={styles.subQuestionText}>What type?</Text>
-                    
-                    {/* Meditation option */}
-                    <TouchableOpacity 
-                      style={[
-                        styles.subOptionButton, 
-                        dailySurveyResponses.relaxation_meditation && styles.subOptionButtonActive
-                      ]}
-                      onPress={() => setDailySurveyResponses(prev => ({...prev, relaxation_meditation: !prev.relaxation_meditation}))}
-                    >
-                      <Text style={[
-                        styles.subOptionText, 
-                        dailySurveyResponses.relaxation_meditation && styles.subOptionTextActive
-                      ]}>
-                        Meditation
-                      </Text>
-                    </TouchableOpacity>
-                    
-                    {/* Deep breathing option */}
-                    <TouchableOpacity 
-                      style={[
-                        styles.subOptionButton, 
-                        dailySurveyResponses.relaxation_breathing && styles.subOptionButtonActive
-                      ]}
-                      onPress={() => setDailySurveyResponses(prev => ({...prev, relaxation_breathing: !prev.relaxation_breathing}))}
-                    >
-                      <Text style={[
-                        styles.subOptionText, 
-                        dailySurveyResponses.relaxation_breathing && styles.subOptionTextActive
-                      ]}>
-                        Deep breathing
-                      </Text>
-                    </TouchableOpacity>
-                    
-                    {/* Journaling option */}
-                    <TouchableOpacity 
-                      style={[
-                        styles.subOptionButton, 
-                        dailySurveyResponses.relaxation_journaling && styles.subOptionButtonActive
-                      ]}
-                      onPress={() => setDailySurveyResponses(prev => ({...prev, relaxation_journaling: !prev.relaxation_journaling}))}
-                    >
-                      <Text style={[
-                        styles.subOptionText, 
-                        dailySurveyResponses.relaxation_journaling && styles.subOptionTextActive
-                      ]}>
-                        Journaling
-                      </Text>
-                    </TouchableOpacity>
-                    
-                    {/* Music option */}
-                    <TouchableOpacity 
-                      style={[
-                        styles.subOptionButton, 
-                        dailySurveyResponses.relaxation_music && styles.subOptionButtonActive
-                      ]}
-                      onPress={() => setDailySurveyResponses(prev => ({...prev, relaxation_music: !prev.relaxation_music}))}
-                    >
-                      <Text style={[
-                        styles.subOptionText, 
-                        dailySurveyResponses.relaxation_music && styles.subOptionTextActive
-                      ]}>
-                        Listening to music
-                      </Text>
-                    </TouchableOpacity>
-                    
-                    {/* Other option with text input */}
-                    <TouchableOpacity 
-                      style={[
-                        styles.subOptionButton, 
-                        dailySurveyResponses.relaxation_other && styles.subOptionButtonActive
-                      ]}
-                      onPress={() => setDailySurveyResponses(prev => ({...prev, relaxation_other: !prev.relaxation_other}))}
-                    >
-                      <Text style={[
-                        styles.subOptionText, 
-                        dailySurveyResponses.relaxation_other && styles.subOptionTextActive
-                      ]}>
-                        Other
-                      </Text>
-                    </TouchableOpacity>
-                    
-                    {/* Text input for "Other" */}
-                    {dailySurveyResponses.relaxation_other && (
-                      <TextInput
-                        style={styles.otherTextInput}
-                        placeholder="Please specify..."
-                        value={dailySurveyResponses.relaxation_other_text || ''}
-                        onChangeText={(text) => setDailySurveyResponses(prev => ({...prev, relaxation_other_text: text}))}
-                      />
-                    )}
-                    
-                    {/* How long? input field */}
-                    <View style={styles.formGroup}>
-                      <Text style={styles.subQuestionText}>How long? (minutes)</Text>
-                      <TextInput
-                        style={styles.input}
-                        placeholder="Duration in minutes"
-                        keyboardType="number-pad"
-                        value={dailySurveyResponses.relaxation_duration}
-                        onChangeText={(text) => setDailySurveyResponses(prev => ({...prev, relaxation_duration: text}))}
-                      />
-                    </View>
-                  </View>
-                )}
-
-                {/* Late Meal */}
-                <View style={styles.yesNoQuestion}>
-                  <Text style={styles.questionText}>🍽️ Had a late meal (within 2h before sleep)?</Text>
-                  <TouchableOpacity 
-                    style={[
-                      styles.toggleButton, 
-                      dailySurveyResponses.late_meal && styles.toggleButtonActive
-                    ]}
-                    onPress={() => setDailySurveyResponses(prev => ({...prev, late_meal: !prev.late_meal}))}
-                  >
-                    <Text style={[
-                      styles.toggleButtonText, 
-                      dailySurveyResponses.late_meal && styles.toggleButtonTextActive
-                    ]}>
-                      {dailySurveyResponses.late_meal ? 'Yes' : 'No'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                                {/* Only show alcohol question if user drinks alcohol */}
-                                {personalInfo.alcohol_consumption !== 'never' && (
-                  <View style={styles.yesNoQuestion}>
-                    <Text style={styles.questionText}>🍷 Consumed alcohol?</Text>
-                    <TouchableOpacity 
-                      style={[
-                        styles.toggleButton, 
-                        dailySurveyResponses.alcohol && styles.toggleButtonActive
-                      ]}
-                      onPress={() => setDailySurveyResponses(prev => ({...prev, alcohol: !prev.alcohol}))}
-                    >
-                      <Text style={[
-                        styles.toggleButtonText, 
-                        dailySurveyResponses.alcohol && styles.toggleButtonTextActive
-                      ]}>
-                        {dailySurveyResponses.alcohol ? 'Yes' : 'No'}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-
-                {/* Only show smoking question if user smokes */}
-                {personalInfo.smoker !== 'no' && (
-                  <View style={styles.yesNoQuestion}>
-                    <Text style={styles.questionText}>🚬 Smoked?</Text>
-                    <TouchableOpacity 
-                      style={[
-                        styles.toggleButton, 
-                        dailySurveyResponses.smoking && styles.toggleButtonActive
-                      ]}
-                      onPress={() => setDailySurveyResponses(prev => ({...prev, smoking: !prev.smoking}))}
-                    >
-                      <Text style={[
-                        styles.toggleButtonText, 
-                        dailySurveyResponses.smoking && styles.toggleButtonTextActive
-                      ]}>
-                        {dailySurveyResponses.smoking ? 'Yes' : 'No'}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-
-                {/* Marijuana - only show if user consumes marijuana */}
-                {personalInfo.marijuana_consumption !== 'no' && (
-                <View style={styles.yesNoQuestion}>
-                  <Text style={styles.questionText}>🍃 Smoked marijuana?</Text>
-                  <TouchableOpacity 
-                    style={[
-                      styles.toggleButton, 
-                      dailySurveyResponses.marijuana && styles.toggleButtonActive
-                    ]}
-                    onPress={() => setDailySurveyResponses(prev => ({...prev, marijuana: !prev.marijuana}))}
-                  >
-                    <Text style={[
-                      styles.toggleButtonText, 
-                      dailySurveyResponses.marijuana && styles.toggleButtonTextActive
-                    ]}>
-                      {dailySurveyResponses.marijuana ? 'Yes' : 'No'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-                )}
-
-                {/* Bright Lights */}
-                <View style={styles.yesNoQuestion}>
-                  <Text style={styles.questionText}>💡 Exposed to bright lights {'<'} 1h before bed?</Text>
-                  <TouchableOpacity 
-                    style={[
-                      styles.toggleButton, 
-                      dailySurveyResponses.bright_lights && styles.toggleButtonActive
-                    ]}
-                    onPress={() => setDailySurveyResponses(prev => ({...prev, bright_lights: !prev.bright_lights}))}
-                  >
-                    <Text style={[
-                      styles.toggleButtonText, 
-                      dailySurveyResponses.bright_lights && styles.toggleButtonTextActive
-                    ]}>
-                      {dailySurveyResponses.bright_lights ? 'Yes' : 'No'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-                
-                {/* Phone in Bed */}
-                <View style={styles.yesNoQuestion}>
-                  <Text style={styles.questionText}>📱 Used phone in bed?</Text>
-                  <TouchableOpacity 
-                    style={[
-                      styles.toggleButton, 
-                      dailySurveyResponses.phone_in_bed && styles.toggleButtonActive
-                    ]}
-                    onPress={() => setDailySurveyResponses(prev => ({...prev, phone_in_bed: !prev.phone_in_bed}))}
-                  >
-                    <Text style={[
-                      styles.toggleButtonText, 
-                      dailySurveyResponses.phone_in_bed && styles.toggleButtonTextActive
-                    ]}>
-                      {dailySurveyResponses.phone_in_bed ? 'Yes' : 'No'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-              </ScrollView>
-              
-              <View style={styles.modalButtons}>
-                <TouchableOpacity 
-                  style={styles.autoFillButton} 
-                  onPress={() => {
-                    // Arrays to store found activities by type
-                    const exerciseActivities = [];
-                    const relaxationActivities = [];
-                    let exerciseDuration = 0;
-                    let relaxationDuration = 0;
-                    let hasMindfulMinutes = false;
-                    
-                    // Check if there are activities in the training section
-                    if (garminData?.activity?.daily_activities && 
-                        garminData.activity.daily_activities.length > 0) {
-                          
-                      // Categorize activities
-                      garminData.activity.daily_activities.forEach(activity => {
-                        const activityType = activity.type.toLowerCase();
-                        
-                        // Check if it's a relaxation activity (yoga or meditation)
-                        if (activityType.includes('yoga') || 
-                            activityType.includes('meditation') || 
-                            activityType.includes('mindful')) {
-                          relaxationActivities.push(activity.type);
-                          relaxationDuration += activity.duration_minutes;
-                        } 
-                        // Otherwise, it's a regular exercise
-                        else {
-                          exerciseActivities.push(activity.type);
-                          exerciseDuration += activity.duration_minutes;
-                        }
-                      });
-                    }
-                    
-                    // Check for mindful minutes
-                    if (garminData?.activity?.mindful_minutes && 
-                        garminData.activity.mindful_minutes > 0) {
-                      hasMindfulMinutes = true;
-                      
-                      // Only add mindful minutes to duration if no meditation activities found
-                      if (!relaxationActivities.some(a => 
-                          a.toLowerCase().includes('meditation') || 
-                          a.toLowerCase().includes('mindful'))) {
-                        relaxationDuration += garminData.activity.mindful_minutes;
-                      }
-                    }
-                    
-                    // Update exercise data if found
-                    if (exerciseActivities.length > 0) {
-                      setDailySurveyResponses(prev => ({
-                        ...prev,
-                        exercise: true,
-                        exercise_type: exerciseActivities.join(", "),
-                        exercise_duration: exerciseDuration.toString()
-                      }));
-                    }
-                    
-                    // Update relaxation data if found
-                    if (relaxationActivities.length > 0 || hasMindfulMinutes) {
-                      const hasYoga = relaxationActivities.some(a => a.toLowerCase().includes('yoga'));
-                      const hasMeditation = relaxationActivities.some(a => 
-                        a.toLowerCase().includes('meditation') || 
-                        a.toLowerCase().includes('mindful')) || hasMindfulMinutes;
-                      
-                      setDailySurveyResponses(prev => ({
-                        ...prev,
-                        relaxation: true,
-                        relaxation_duration: relaxationDuration.toString(),
-                        relaxation_meditation: hasMeditation,
-                        relaxation_other: hasYoga,
-                        relaxation_other_text: hasYoga ? 'Yoga' : prev.relaxation_other_text
-                      }));
-                    }
-                    
-                    // Show message if no data found
-                    if (exerciseActivities.length === 0 && 
-                        relaxationActivities.length === 0 && 
-                        !hasMindfulMinutes) {
-                      Alert.alert(
-                        "No Activity Data",
-                        "No exercise or relaxation activities were found in your data."
-                      );
-                    }
-                  }}
-                >
-                  <Text style={styles.autoFillButtonText}>Autofill Exercise Data</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity style={styles.modalSubmitButton} onPress={submitSurvey}>
-                  <Text style={styles.modalButtonText}>Submit</Text>
-                </TouchableOpacity>
-              </View>
-            
-          </View>
-        </View>
-      </Modal>
 
       {/* Personal Info Modal */}
       <PersonalInfoModal />
-
     </View>
   );
 };
