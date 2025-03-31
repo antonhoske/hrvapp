@@ -2,8 +2,8 @@ import React, { createContext, useState, useContext, ReactNode } from 'react';
 
 // Define the type for the context value
 type DataSourceContextType = {
-  dataSource: 'garmin' | 'apple' | null;
-  setDataSource: (source: 'garmin' | 'apple' | null) => void;
+  dataSource: 'garmin' | 'apple';
+  setDataSource: (source: 'garmin' | 'apple') => void;
 };
 
 // Create the context with a default value
@@ -14,7 +14,7 @@ const DataSourceContext = createContext<DataSourceContextType>({
 
 // Create a provider component
 export const DataSourceProvider = ({ children }: { children: ReactNode }) => {
-  const [dataSource, setDataSource] = useState<'garmin' | 'apple' | null>('apple');
+  const [dataSource, setDataSource] = useState<'garmin' | 'apple'>('apple');
 
   return (
     <DataSourceContext.Provider value={{ dataSource, setDataSource }}>

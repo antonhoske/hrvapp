@@ -15,17 +15,11 @@ import AppleHealthKit, {
   HealthPermission
 } from 'react-native-health';
 import { doc, setDoc } from "firebase/firestore";  
-import { getAuth, initializeAuth, Auth } from "firebase/auth";
+import { getAuth, Auth } from "firebase/auth";
 import Constants from 'expo-constants';
 import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { 
-  requestNotificationPermissions, 
-  scheduleDailySurveyReminder, 
-  getReminderTimePreference, 
-  refreshDailyReminder,
-  isSurveyReminderScheduled 
-} from '../utils/notifications';
+import { requestNotificationPermissions, scheduleDailySurveyReminder, getReminderTimePreference, refreshDailyReminder } from '../utils/notifications';
 import NotificationTimePicker from '../components/NotificationTimePicker';
 import { useDataSource } from '../components/DataSourceContext';
 
@@ -77,7 +71,7 @@ let db: Firestore | undefined;
 
 try {
   app = initializeApp(firebaseConfig);
-  auth = initializeAuth(app);
+  auth = getAuth(app);
   db = getFirestore(app);
 } catch (error) {
   console.error('Firebase initialization error:', error);
@@ -568,17 +562,17 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   refreshButton: {
-    backgroundColor: '#4CAF50',
-    padding: 8,
-    borderRadius: 8,
-    width: 35,
-    height: 35,
+    backgroundColor: '#4285F4',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+    marginLeft: 10,
   },
   refreshButtonText: {
-    fontSize: 20,
-    color: '#fff',
+    color: 'white',
+    fontSize: 14,
     fontWeight: 'bold',
   },
   hrvReadingsContainer: {
@@ -728,6 +722,12 @@ const styles = StyleSheet.create({
   },
   buttonTextDisabled: {
     color: '#999',
+  },
+  sectionHeader: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    color: '#333',
   },
 });
 
@@ -1920,31 +1920,41 @@ const HomeScreen = () => {
     }
   }, [dataSource]);
 
+  // In the initializeApp function, ensure we properly fetch data based on the current data source
   const initializeApp = async () => {
     setLoading(true);
+    setInitError('');
+
     try {
-      if (await SecureStore.getItemAsync('garmin_email') && await SecureStore.getItemAsync('garmin_password')) {
+      // Always set the data source based on AsyncStorage first
+      const useGarmin = await AsyncStorage.getItem('useGarmin');
+      if (useGarmin === 'true') {
         setDataSource('garmin');
-      }
-      else {
+        // Check Garmin credentials
+        const storedEmail = await SecureStore.getItemAsync('garmin_email');
+        const storedPassword = await SecureStore.getItemAsync('garmin_password');
+        
+        if (storedEmail && storedPassword) {
+          // Schedule Garmin data fetch
+          setTimeout(() => {
+            fetchGarminData(storedEmail, storedPassword);
+          }, 500);
+        }
+      } else {
         setDataSource('apple');
-      }
-
-      if (dataSource === 'apple' && Platform.OS === 'ios') {
         
-        
-        
-        
-        // Check platform first
+        // Platform check
         if (Platform.OS !== 'ios') {
-          
-        setHealthKitAvailable(false);
-        return;
-      }
+          setInitError('Apple HealthKit is only available on iOS devices.');
+          setHealthKitAvailable(false);
+          setLoading(false);
+          return;
+        }
 
-      const permissions = {
-        permissions: {
-          read: [
+        // Configure HealthKit
+        const permissions = {
+          permissions: {
+            read: [
               'HeartRateVariability',
               'HeartRate',
               'Steps',
@@ -1963,126 +1973,64 @@ const HomeScreen = () => {
           },
         };
 
-        try {
-          // First check if HealthKit is available on the device
-          
-          const isAvailable = await new Promise((resolve) => {
-            if (typeof AppleHealthKit.isAvailable !== 'function') {
-              console.error('isAvailable method not found on AppleHealthKit');
-                            resolve(false);
-              return;
-            }
-            
-            AppleHealthKit.isAvailable((error: string, result: boolean) => {
-              if (error) {
-                console.error('Error checking HealthKit availability:', error);
-                resolve(false);
-                return;
-              }
-              
-              resolve(result);
-            });
-          });
-
-          if (!isAvailable) {
-            
-            setHealthKitAvailable(false);
-            Alert.alert(
-              'HealthKit Not Available',
-              'Please check:\n\n1. You are using an iOS device\n2. Health app is installed\n3. Your device supports HealthKit\n4. You have granted permissions in Settings',
-              [{ text: 'OK' }]
-            );
+        // Check if HealthKit is available
+        const isAvailable = await new Promise((resolve) => {
+          if (typeof AppleHealthKit.isAvailable !== 'function') {
+            console.error('isAvailable method not found on AppleHealthKit');
+            resolve(false);
             return;
           }
-
-          // Set HealthKit as available since we confirmed it is
-          await new Promise<void>((resolve) => {
-            setHealthKitAvailable(true);
-            // Use a short timeout to ensure state is updated
-            setTimeout(resolve, 0);
-          });
-
           
-          // Then initialize HealthKit
-      await new Promise<void>((resolve, reject) => {
-            if (typeof AppleHealthKit.initHealthKit !== 'function') {
-              console.error('initHealthKit method not found on AppleHealthKit');
-                            setHealthKitAvailable(false);
-              reject(new Error('HealthKit initialization method not available'));
+          AppleHealthKit.isAvailable((error: string, result: boolean) => {
+            if (error) {
+              console.error('Error checking HealthKit availability:', error);
+              resolve(false);
               return;
             }
-
-        AppleHealthKit.initHealthKit(permissions, (error: string) => {
-          if (error) {
-            console.error('Error initializing HealthKit:', error);
-            setHealthKitAvailable(false);
-            reject(new Error(error));
-          } else {
             
-            resolve();
-          }
+            resolve(result);
+          });
         });
-      });
 
-          // After successful initialization, check permissions
-          
-          await new Promise<void>((resolve, reject) => {
-            if (typeof AppleHealthKit.getAuthStatus !== 'function') {
-              console.error('getAuthStatus method not found on AppleHealthKit');
-              setHealthKitAvailable(false);
-              reject(new Error('HealthKit auth status method not available'));
-      return;
-    }
-
-            AppleHealthKit.getAuthStatus(permissions, (error: string, result: any) => {
-              if (error) {
-                console.error('Error checking HealthKit permissions:', error);
-                setHealthKitAvailable(false);
-                reject(error);
-              } else {
-                                if (result.permissions.read) {
-                  
-                  // Use setTimeout to ensure state is updated before fetching
-                  setTimeout(() => {
-                    
-                    fetchHRVData();
-                  }, 100);
-                } else {
-                  
-                  setHealthKitAvailable(false);
-                  Alert.alert(
-                    'Permissions Required',
-                    'Please open your device Settings > Privacy > Health and grant all permissions for this app.',
-                    [{ text: 'OK' }]
-                  );
-                }
-                resolve();
-              }
-        });
-      });
-
-    } catch (error) {
-          console.error('HealthKit setup error:', error);
+        if (!isAvailable) {
+          setInitError('HealthKit is not available on this device.');
           setHealthKitAvailable(false);
-          Alert.alert(
-            'HealthKit Error',
-            'Error setting up HealthKit. Please ensure:\n\n1. Health app is installed\n2. Permissions are granted in Settings\n3. Your device supports HealthKit',
-            [{ text: 'OK' }]
-          );
+          setLoading(false);
+          return;
         }
-      } else if (dataSource === 'garmin') {
-        await checkLogin();
+
+        // HealthKit is available, initialize and fetch data
+        setHealthKitAvailable(true);
+
+        try {
+          // Request HealthKit authorization
+          console.log('Requesting HealthKit authorization...');
+          AppleHealthKit.initHealthKit(permissions, (error: string) => {
+            if (error) {
+              console.error('Error initializing HealthKit:', error);
+              setInitError('Error initializing HealthKit: ' + error);
+              setLoading(false);
+              return;
+            }
+            
+            console.log('HealthKit initialized, fetching data...');
+            // Fetch Apple Health data
+            fetchHRVData();
+          });
+        } catch (error) {
+          console.error('Error initializing HealthKit:', error);
+          setInitError('Error initializing HealthKit: ' + error);
         }
-        
-        setIsInitialized(true);
-      } catch (error) {
-        console.error('Initialization error:', error);
-      setHealthKitAvailable(false);
-        setInitError(error instanceof Error ? error.message : ERROR_MESSAGES.INIT);
-      } finally {
-        setLoading(false);
       }
-    };
+
+      setIsInitialized(true);
+    } catch (error) {
+      console.error('Error initializing app:', error);
+      setInitError('Error initializing app: ' + error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
     // Update the handler functions to use the new modal system
     const handleSourceChange = async (newSource: 'apple' | 'garmin') => {
@@ -4578,43 +4526,7 @@ const HomeScreen = () => {
   return (
     <View style={styles.container}>
       <View style={styles.sectionTitle}>
-      <Text style={styles.sectionTitle}>Welcome {personalInfo.firstname}! </Text>
-        <View style={styles.headerButtons}>
-          <TouchableOpacity
-            style={styles.refreshButton}
-            onPress={() => {
-              if (dataSource === 'apple') {
-                fetchHRVData();
-              } else if (dataSource === 'garmin') {
-                checkLogin();
-              }
-            }}
-          >
-            <Text style={styles.refreshButtonText}>↻</Text>
-          </TouchableOpacity>
-
-          {dataSource === 'garmin' && (
-            <TouchableOpacity
-              style={[styles.garminButton, styles.sourceButton]}
-                onPress={() => setGarminModalVisible(true)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.sourceButtonText}>Change Login</Text>
-            </TouchableOpacity>
-          )}
-
-          <TouchableOpacity
-            style={styles.sourceButton}
-            onPress={() => {
-              const newSource = dataSource === 'apple' ? 'garmin' : 'apple';
-              handleSourceChange(newSource);
-            }}
-          >
-            <Text style={styles.sourceButtonText}>
-              {dataSource === 'apple' ? 'Connect Garmin Watch' : 'Connect Apple Watch'}
-            </Text>
-          </TouchableOpacity>
-        </View>
+      <Text style={styles.title}>Good morning {personalInfo.firstname}! </Text>
       </View>
       
       {loading ? (
@@ -4625,92 +4537,110 @@ const HomeScreen = () => {
           showsVerticalScrollIndicator={true}
           contentContainerStyle={styles.scrollViewContent}
         >
-          {healthKitAvailable && dataSource === 'apple' && (
-            <Text style={styles.healthKitStatus}>Apple HealthKit verbunden</Text>
+        
+
+          
+
+          {(!personalInfoSubmitted || !historyDataUploaded) && (
+            <>
+              <Text style={styles.sectionHeader}>Please provide your personal data once:</Text>
+              <View style={styles.buttonContainer}>
+                <TouchableOpacity 
+                  style={[
+                    styles.button,
+                    personalInfoSubmitted ? styles.buttonPressed : {}
+                  ]}
+                  onPress={handlePersonalInfoButtonPress}
+                >
+                  <View style={styles.buttonWithCheckbox}>
+                    <Text style={styles.buttonText}>Personal Information</Text>
+                    {personalInfoSubmitted && <Text style={styles.checkmark}>✓</Text>}
+                  </View>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={[
+                    styles.button,
+                    historyDataUploaded ? styles.buttonPressed : {}
+                  ]}
+                  onPress={async () => {
+                    // Retrieve credentials before the function call
+                    const storedEmail = email || await SecureStore.getItemAsync("garmin_email") || "";
+                    const storedPassword = password || await SecureStore.getItemAsync("garmin_password") || "";
+                    
+                    const uploadSuccess = await uploadHistoricalData(
+                      db, 
+                      getOrCreateDeviceId, 
+                      setLoading,
+                      dataSource,
+                      async (email, password, date) => {
+                        // Create a function to fetch Garmin data for a specific date
+                        try {
+                          console.log(`Fetching historical data for date: ${date}`);
+                          const requestBody = { 
+                            email: email, 
+                            password: password, 
+                            date: date 
+                          };
+                          
+                          const API_URL = Constants.expoConfig?.extra?.apiUrl || 'https://dodo-holy-primarily.ngrok-free.app';
+                          const response = await fetch(`${API_URL}/all_data`, {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify(requestBody),
+                          });
+                          
+                          if (!response.ok) {
+                            throw new Error(`Server error: ${response.status}`);
+                          }
+                          
+                          const data = await response.json();
+                          console.log(`Successfully received data for ${date}`);
+                          return data;
+                        } catch (error) {
+                          console.error(`Error fetching Garmin data for ${date}:`, error);
+                          throw error;
+                        }
+                      },
+                      healthKitAvailable,
+                      {
+                        email: storedEmail,
+                        password: storedPassword
+                      }
+                    );
+                    
+                    // Only set the uploaded flag if the upload was successful
+                    if (uploadSuccess) {
+                      setHistoryDataUploaded(true);
+                    }
+                  }}
+                >
+                  <View style={styles.buttonWithCheckbox}>
+                    <Text style={styles.buttonText}>Upload Historical Data</Text>
+                    {historyDataUploaded && <Text style={styles.checkmark}>✓</Text>}
+                  </View>
+                </TouchableOpacity>
+              </View>
+            </>
           )}
 
-         
-
-<View style={styles.buttonContainer}>
-            
-
-            <TouchableOpacity 
-              style={[
-                styles.button,
-                personalInfoSubmitted ? styles.buttonPressed : {}
-              ]}
-              onPress={handlePersonalInfoButtonPress}
-            >
-              <View style={styles.buttonWithCheckbox}>
-                <Text style={styles.buttonText}>Personal Information</Text>
-                {personalInfoSubmitted && <Text style={styles.checkmark}>✓</Text>}
-              </View>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[
-                styles.button,
-                historyDataUploaded ? styles.buttonPressed : {}
-              ]}
-              onPress={async () => {
-                // Retrieve credentials before the function call
-                const storedEmail = email || await SecureStore.getItemAsync("garmin_email") || "";
-                const storedPassword = password || await SecureStore.getItemAsync("garmin_password") || "";
-                
-                const uploadSuccess = await uploadHistoricalData(
-                  db, 
-                  getOrCreateDeviceId, 
-                  setLoading,
-                  dataSource,
-                  async (email, password, date) => {
-                    // Create a function to fetch Garmin data for a specific date
-                    try {
-                      console.log(`Fetching historical data for date: ${date}`);
-                      const requestBody = { 
-                        email: email, 
-                        password: password, 
-                        date: date 
-                      };
-                      
-                      const API_URL = Constants.expoConfig?.extra?.apiUrl || 'https://dodo-holy-primarily.ngrok-free.app';
-                      const response = await fetch(`${API_URL}/all_data`, {
-                        method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(requestBody),
-                      });
-                      
-                      if (!response.ok) {
-                        throw new Error(`Server error: ${response.status}`);
-                      }
-                      
-                      const data = await response.json();
-                      console.log(`Successfully received data for ${date}`);
-                      return data;
-                    } catch (error) {
-                      console.error(`Error fetching Garmin data for ${date}:`, error);
-                      throw error;
-                    }
-                  },
-                  healthKitAvailable,
-                  {
-                    email: storedEmail,
-                    password: storedPassword
-                  }
-                );
-                
-                // Only set the uploaded flag if the upload was successful
-                if (uploadSuccess) {
-                  setHistoryDataUploaded(true);
+          <Text style={styles.sectionHeader}>Please provide today's data:</Text>
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity
+              style={styles.button}
+              onPress={() => {
+                if (dataSource === 'apple') {
+                  fetchHRVData();
+                } else if (dataSource === 'garmin') {
+                  checkLogin();
                 }
               }}
             >
-              <View style={styles.buttonWithCheckbox}>
-                <Text style={styles.buttonText}>Upload Historical Data</Text>
-                {historyDataUploaded && <Text style={styles.checkmark}>✓</Text>}
-              </View>
+              <Text style={styles.buttonText}>Send HRV Data</Text>
             </TouchableOpacity>
+            
             <TouchableOpacity 
               style={[
                 styles.button, 

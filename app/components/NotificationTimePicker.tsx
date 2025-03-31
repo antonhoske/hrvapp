@@ -35,9 +35,9 @@ const NotificationTimePicker: React.FC<NotificationTimePickerProps> = ({ onTimeS
     return `${hour12}:${minutes.toString().padStart(2, '0')} ${period}`;
   }, []);
   
-  // Load the saved preference when component mounts or isConfigMode changes
+  // Initial load of preferences
   useEffect(() => {
-    const loadReminderState = async () => {
+    const initialLoad = async () => {
       try {
         setIsLoading(true);
         
@@ -45,19 +45,19 @@ const NotificationTimePicker: React.FC<NotificationTimePickerProps> = ({ onTimeS
         const reminderSet = await isReminderSet();
         const { hour, minute } = await getReminderTimePreference();
         
-        console.log('Loading saved reminder time:', hour, minute);
+        console.log('Initial load of reminder time:', { hour, minute, reminderSet });
         
-        // Update UI state
+        // Update UI state with the saved time
         const newDate = new Date();
         newDate.setHours(hour, minute, 0, 0);
         setDate(newDate);
         
-        // Set manual input values too
+        // Set manual input values
         setManualHour(String(hour % 12 || 12));
         setManualMinute(String(minute).padStart(2, '0'));
         setManualAmPm(hour >= 12 ? 'PM' : 'AM');
         
-        // Make sure to format and set the time string correctly
+        // Format and set the time string correctly
         const formattedTime = formatTime(hour, minute);
         console.log('Setting formatted time string:', formattedTime);
         setTimeString(formattedTime);
@@ -77,8 +77,8 @@ const NotificationTimePicker: React.FC<NotificationTimePickerProps> = ({ onTimeS
       }
     };
     
-    loadReminderState();
-  }, [formatTime, isConfigMode]); // Re-run when toggling between compact and config mode
+    initialLoad();
+  }, [formatTime]); // Only run this on mount
   
   // Set up the notification refresh interval
   useEffect(() => {
@@ -152,6 +152,11 @@ const NotificationTimePicker: React.FC<NotificationTimePickerProps> = ({ onTimeS
   
   // Toggle manual time input as a fallback
   const toggleManualInput = () => {
+    console.log('Toggling manual input, current state:', showManualInput);
+    // Always hide time picker when showing manual input
+    if (!showManualInput) {
+      setShowTimePicker(false);
+    }
     setShowManualInput(!showManualInput);
   };
   
@@ -195,6 +200,51 @@ const NotificationTimePicker: React.FC<NotificationTimePickerProps> = ({ onTimeS
     }
   };
   
+  // Toggle between config and compact modes
+  const toggleConfigMode = async () => {
+    console.log('Toggling config mode, current state:', isConfigMode);
+    
+    // If we're going from compact to config mode, refresh the time values first
+    if (!isConfigMode) {
+      try {
+        setIsLoading(true);
+        
+        // Force reload the time values from storage
+        const { hour, minute } = await getReminderTimePreference();
+        console.log('Reloaded time before showing config:', hour, minute);
+        
+        // Update UI with correct time
+        const newDate = new Date();
+        newDate.setHours(hour, minute, 0, 0);
+        setDate(newDate);
+        
+        // Set manual input values
+        setManualHour(String(hour % 12 || 12));
+        setManualMinute(String(minute).padStart(2, '0'));
+        setManualAmPm(hour >= 12 ? 'PM' : 'AM');
+        
+        // Format the time string
+        const formattedTime = formatTime(hour, minute);
+        setTimeString(formattedTime);
+        console.log('Updated time display to:', formattedTime);
+      } catch (error) {
+        console.error('Error refreshing time values:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    
+    // Force immediate change with more debugging
+    const newConfigMode = !isConfigMode;
+    console.log('Setting config mode to:', newConfigMode);
+    setIsConfigMode(newConfigMode);
+    
+    // Reset manual input when showing config view
+    if (newConfigMode) {
+      setShowManualInput(false);
+    }
+  };
+  
   // Handle submit button press
   const handleSubmit = async () => {
     try {
@@ -204,7 +254,11 @@ const NotificationTimePicker: React.FC<NotificationTimePickerProps> = ({ onTimeS
       const hours = date.getHours();
       const minutes = date.getMinutes();
       
-      console.log('Saving notification time:', hours, minutes);
+      console.log('HANDLE SUBMIT - Current time values:', {
+        hours,
+        minutes,
+        date: date.toISOString()
+      });
       
       // Mark this as a user-initiated settings change
       await AsyncStorage.setItem('isSettingTime', 'true');
@@ -213,7 +267,13 @@ const NotificationTimePicker: React.FC<NotificationTimePickerProps> = ({ onTimeS
       await AsyncStorage.setItem('isReminderSet', 'false');
       
       // Schedule the notification with the new time
-      await scheduleDailySurveyReminder(hours, minutes);
+      const notificationId = await scheduleDailySurveyReminder(hours, minutes);
+      
+      console.log('NOTIFICATION SCHEDULED:', {
+        notificationId,
+        hours,
+        minutes
+      });
       
       // Update the time string to ensure it reflects the saved time
       const formattedTime = formatTime(hours, minutes);
@@ -235,11 +295,6 @@ const NotificationTimePicker: React.FC<NotificationTimePickerProps> = ({ onTimeS
     }
   };
   
-  // Toggle between config and compact modes
-  const toggleConfigMode = () => {
-    setIsConfigMode(!isConfigMode);
-  };
-  
   if (isLoading) {
     // You could show a loading spinner here if needed
     return (
@@ -255,14 +310,16 @@ const NotificationTimePicker: React.FC<NotificationTimePickerProps> = ({ onTimeS
         <>
           <Text style={styles.label}>Set Daily Survey Notification:</Text>
           
-          <TouchableOpacity 
-            style={styles.timeButton}
-            onPress={toggleTimePicker}
-          >
-            <Text style={styles.timeText}>{timeString}</Text>
-          </TouchableOpacity>
+          {!showManualInput && (
+            <TouchableOpacity 
+              style={styles.timeButton}
+              onPress={toggleTimePicker}
+            >
+              <Text style={styles.timeText}>{timeString}</Text>
+            </TouchableOpacity>
+          )}
           
-          {Platform.OS === 'android' && showTimePicker && (
+          {Platform.OS === 'android' && showTimePicker && !showManualInput && (
             <DateTimePicker
               testID="dateTimePicker"
               value={date}
@@ -273,7 +330,7 @@ const NotificationTimePicker: React.FC<NotificationTimePickerProps> = ({ onTimeS
             />
           )}
           
-          {Platform.OS === 'ios' && showTimePicker && (
+          {Platform.OS === 'ios' && showTimePicker && !showManualInput && (
             <DateTimePicker
               testID="dateTimePicker"
               value={date}
@@ -285,50 +342,53 @@ const NotificationTimePicker: React.FC<NotificationTimePickerProps> = ({ onTimeS
           )}
           
           <TouchableOpacity 
-            style={styles.secondaryButton}
+            style={[styles.secondaryButton, showManualInput ? styles.activeSecondaryButton : {}]}
             onPress={toggleManualInput}
           >
-            <Text style={styles.secondaryButtonText}>
+            <Text style={[styles.secondaryButtonText, showManualInput ? styles.activeSecondaryButtonText : {}]}>
               {showManualInput ? 'Hide Manual Input' : 'Enter Time Manually'}
             </Text>
           </TouchableOpacity>
           
           {showManualInput && (
-            <View style={styles.manualInputContainer}>
-              <TextInput
-                style={styles.timeInput}
-                value={manualHour}
-                onChangeText={setManualHour}
-                keyboardType="number-pad"
-                maxLength={2}
-                placeholder="HH"
-              />
-              <Text style={styles.timeSeparator}>:</Text>
-              <TextInput
-                style={styles.timeInput}
-                value={manualMinute}
-                onChangeText={setManualMinute}
-                keyboardType="number-pad"
-                maxLength={2}
-                placeholder="MM"
-              />
-              <TouchableOpacity 
-                style={[styles.amPmButton, manualAmPm === 'AM' ? styles.activeAmPm : {}]}
-                onPress={() => setManualAmPm('AM')}
-              >
-                <Text style={[styles.amPmText, manualAmPm === 'AM' ? styles.activeAmPmText : {}]}>AM</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.amPmButton, manualAmPm === 'PM' ? styles.activeAmPm : {}]}
-                onPress={() => setManualAmPm('PM')}
-              >
-                <Text style={[styles.amPmText, manualAmPm === 'PM' ? styles.activeAmPmText : {}]}>PM</Text>
-              </TouchableOpacity>
+            <View style={styles.manualInputContainerOuter}>
+              <Text style={styles.manualInputLabel}>Enter your preferred notification time:</Text>
+              <View style={styles.manualInputContainer}>
+                <TextInput
+                  style={styles.timeInput}
+                  value={manualHour}
+                  onChangeText={setManualHour}
+                  keyboardType="number-pad"
+                  maxLength={2}
+                  placeholder="HH"
+                />
+                <Text style={styles.timeSeparator}>:</Text>
+                <TextInput
+                  style={styles.timeInput}
+                  value={manualMinute}
+                  onChangeText={setManualMinute}
+                  keyboardType="number-pad"
+                  maxLength={2}
+                  placeholder="MM"
+                />
+                <TouchableOpacity 
+                  style={[styles.amPmButton, manualAmPm === 'AM' ? styles.activeAmPm : {}]}
+                  onPress={() => setManualAmPm('AM')}
+                >
+                  <Text style={[styles.amPmText, manualAmPm === 'AM' ? styles.activeAmPmText : {}]}>AM</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.amPmButton, manualAmPm === 'PM' ? styles.activeAmPm : {}]}
+                  onPress={() => setManualAmPm('PM')}
+                >
+                  <Text style={[styles.amPmText, manualAmPm === 'PM' ? styles.activeAmPmText : {}]}>PM</Text>
+                </TouchableOpacity>
+              </View>
               <TouchableOpacity 
                 style={styles.applyTimeButton}
                 onPress={submitManualTime}
               >
-                <Text style={styles.applyTimeText}>Apply</Text>
+                <Text style={styles.applyTimeText}>Apply Time</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -342,12 +402,16 @@ const NotificationTimePicker: React.FC<NotificationTimePickerProps> = ({ onTimeS
         </>
       ) : (
         <View style={styles.compactContainer}>
-          <Text style={styles.compactText}>
-            Daily reminder set for <Text style={styles.timeHighlight}>{timeString}</Text>
-          </Text>
+          <View style={styles.compactTextContainer}>
+            <Text style={styles.compactText}>
+              Daily reminder set for <Text style={styles.timeHighlight}>{timeString}</Text>
+            </Text>
+    
+          </View>
           <TouchableOpacity 
             style={styles.editButton}
             onPress={toggleConfigMode}
+            testID="changeTimeButton"
           >
             <Text style={styles.editButtonText}>Change</Text>
           </TouchableOpacity>
@@ -387,11 +451,11 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     alignItems: 'center',
-    marginTop: 10,
+    marginTop: 15,
   },
   secondaryButton: {
     backgroundColor: '#f0f0f0',
-    padding: 8,
+    padding: 10,
     borderRadius: 8,
     alignItems: 'center',
     marginVertical: 10,
@@ -399,6 +463,7 @@ const styles = StyleSheet.create({
   secondaryButtonText: {
     color: '#007AFF',
     fontSize: 14,
+    fontWeight: '600',
   },
   buttonText: {
     color: 'white',
@@ -406,64 +471,99 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   compactContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: 'column',
+    justifyContent: 'center',
     alignItems: 'center',
+    padding: 10,
+  },
+  compactTextContainer: {
+    flexDirection: 'column',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 15,
+    width: '100%',
   },
   compactText: {
     fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 5,
   },
   timeHighlight: {
     fontWeight: 'bold',
     color: '#007AFF',
   },
+  debugMessage: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 5,
+  },
   editButton: {
     backgroundColor: '#007AFF',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    minWidth: 100,
+    alignItems: 'center',
   },
   editButtonText: {
     color: 'white',
     fontWeight: '600',
+    fontSize: 16,
+  },
+  manualInputContainerOuter: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 12,
+    marginVertical: 10,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  manualInputLabel: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    textAlign: 'center',
   },
   manualInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginVertical: 10,
+    marginBottom: 12,
   },
   timeInput: {
     backgroundColor: 'white',
     paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingVertical: 12,
     borderRadius: 5,
     borderWidth: 1,
     borderColor: '#ccc',
-    width: 50,
+    width: 60,
     textAlign: 'center',
-    fontSize: 16,
+    fontSize: 18,
+    fontWeight: '600',
   },
   timeSeparator: {
-    marginHorizontal: 5,
-    fontSize: 16,
+    marginHorizontal: 8,
+    fontSize: 18,
     fontWeight: 'bold',
   },
   amPmButton: {
     marginLeft: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
     borderRadius: 5,
     borderWidth: 1,
     borderColor: '#ccc',
     backgroundColor: 'white',
+    minWidth: 50,
+    alignItems: 'center',
   },
   activeAmPm: {
     backgroundColor: '#007AFF',
     borderColor: '#007AFF',
   },
   amPmText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
     color: '#333',
   },
@@ -471,16 +571,24 @@ const styles = StyleSheet.create({
     color: 'white',
   },
   applyTimeButton: {
-    marginLeft: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 5,
     backgroundColor: '#4CAF50',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 5,
+    alignSelf: 'center', 
+    width: '100%',
   },
   applyTimeText: {
     color: 'white',
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
+    textAlign: 'center',
+  },
+  activeSecondaryButton: {
+    backgroundColor: '#007AFF',
+  },
+  activeSecondaryButtonText: {
+    color: 'white',
   },
 });
 

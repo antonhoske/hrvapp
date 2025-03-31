@@ -1,8 +1,7 @@
 import { Tabs } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { Platform, Button, View, SafeAreaView } from "react-native";
-import * as SecureStore from "expo-secure-store";
-import LoginModal from "@/components/LoginModal";
+import { Platform } from "react-native";
+import SettingsButton from "../components/SettingsButton";
 
 export default function TabLayout() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -16,18 +15,21 @@ export default function TabLayout() {
     <>
       <Tabs
         screenOptions={{
-          headerShown: false,
+          headerShown: true,
           tabBarStyle: Platform.select({ ios: { position: "absolute" }, default: {} }),
+          headerRight: () => <SettingsButton />,
+          headerTitle: "",
         }}
       >
         <Tabs.Screen
           name="explore"
           options={{ title: "Explore" }}
-          
         />
-        <Tabs.Screen name="index" options={{ title: "Training" }} />
+        <Tabs.Screen 
+          name="index" 
+          options={{ title: "Training" }} 
+        />
       </Tabs>
-
     </>
   );
 }
