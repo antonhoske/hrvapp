@@ -19,6 +19,9 @@ import { getAuth, initializeAuth, Auth } from "firebase/auth";
 import Constants from 'expo-constants';
 import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { requestNotificationPermissions, scheduleDailySurveyReminder, getReminderTimePreference } from '../utils/notifications';
+import NotificationTimePicker from '../components/NotificationTimePicker';
+import { useDataSource } from '../components/DataSourceContext';
 
 // Add type declarations for Apple HealthKit
 declare module 'react-native-health' {
@@ -159,45 +162,107 @@ interface SleepSample {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
     backgroundColor: '#fff',
+    padding: 20,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollViewContent: {
+    paddingBottom: 20,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 20,
-    textAlign: 'center',
-  },
-  scrollView: {
-    flex: 1,
-    width: '100%',
-  },
-  scrollViewContent: {
-    paddingBottom: 100,
-  },
-  buttonContainer: {
-    marginTop: 20,
-    gap: 10,
-    width: '100%',
-    paddingHorizontal: 10,
-    marginBottom: 20,
   },
   button: {
     backgroundColor: '#007AFF',
-    padding: 15,
-    borderRadius: 10,
+    padding: 12,
+    borderRadius: 8,
     alignItems: 'center',
-    width: '100%',
-    minHeight: 50,
-    justifyContent: 'center',
-  },
-  garminButton: {
-    backgroundColor: '#FF6B00', // Garmin's brand color
+    marginVertical: 8,
   },
   buttonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  healthKitStatus: {
+    color: 'green',
+    marginVertical: 10,
+    fontWeight: 'bold',
+  },
+  dataRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginVertical: 5,
+  },
+  dataLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
+  dataValue: {
+    fontSize: 16,
+    color: '#333',
+  },
+  chartContainer: {
+    height: 200,
+    marginVertical: 20,
+  },
+  section: {
+    marginVertical: 20,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 15,
+    color: '#333'
+  },
+  hrvSummary: {
+    backgroundColor: '#f5f8fa',
+    padding: 15,
+    borderRadius: 10,
+    marginVertical: 10,
+  },
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginVertical: 5,
+  },
+  subRow: {
+    marginLeft: 10,
+    marginTop: 2,
+  },
+  subText: {
+    fontSize: 12,
+    color: '#666',
+    fontStyle: 'italic',
+  },
+  label: {
+    fontSize: 16,
+    color: '#333',
+  },
+  value: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#333',
+  },
+  sleepSummary: {
+    marginVertical: 10,
+  },
+  sleepTime: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    color: '#333',
+  },
+  noData: {
+    color: '#666',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginVertical: 10,
   },
   modalContainer: {
     flex: 1,
@@ -206,361 +271,223 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   modalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
+    backgroundColor: 'white',
     padding: 20,
-    width: '90%',
+    borderRadius: 10,
+    width: '95%',
     maxHeight: '90%',
-    height: '80%',
   },
   modalHeader: {
-    width: '100%',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: 20,
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: 'bold',
   },
   closeButton: {
-    padding: 8,
-  },
-  closeButtonText: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 24,
+    color: '#333',
   },
   input: {
     borderWidth: 1,
     borderColor: '#ddd',
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 15,
+    borderRadius: 5,
+    padding: 12,
+    marginVertical: 6,
     fontSize: 16,
   },
+  buttonPressed: {
+    backgroundColor: '#ccc',
+  },
+  buttonContainer: {
+    flexDirection: 'column',
+    marginVertical: 15,
+  },
+  modalButtonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
+    paddingHorizontal: 10,
+  },
   questionContainer: {
-    marginBottom: 20,
+    marginVertical: 15,
   },
   questionText: {
     fontSize: 16,
     marginBottom: 10,
   },
-  healthKitStatus: {
-    color: '#4CAF50',
-    marginBottom: 10,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  dataContainer: {
-    backgroundColor: '#f5f5f5',
-    borderRadius: 15,
-    padding: 20,
-    marginBottom: 20,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 15,
-    color: '#333',
-  },
-  dataRow: {
+  likertContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
   },
-  dataLabel: {
-    fontSize: 16,
-    color: '#666',
-  },
-  dataValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#007AFF',
-  },
-  formContainer: {
-    paddingBottom: 20,
-    width: '100%',
-  },
-  debugText: {
-    color: '#666',
-    marginBottom: 10,
-  },
-  debug: {
-    color: 'gray',
-    fontSize: 12,
-    marginVertical: 4,
-  },
-  row: {
+  switchContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginVertical: 10,
   },
-  label: {
+  switchLabel: {
     fontSize: 16,
-    color: '#666',
-  },
-  value: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#007AFF',
-  },
-  subRow: {
-    paddingLeft: 16,
-    paddingTop: 4,
-  },
-  subText: {
-    fontSize: 12,
-    color: '#888',
-    fontStyle: 'italic',
   },
   activityRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
+    marginVertical: 5,
+    paddingVertical: 5,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: '#eee',
   },
   activityType: {
     fontSize: 16,
-    color: '#333',
     fontWeight: '500',
+    color: '#333',
   },
   activityDuration: {
     fontSize: 16,
     color: '#666',
   },
-  noActivities: {
+  tab: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    marginRight: 10,
+    borderRadius: 20,
+  },
+  activeTab: {
+    backgroundColor: '#007AFF',
+  },
+  tabText: {
     fontSize: 14,
-    color: '#666',
-    fontStyle: 'italic',
-    textAlign: 'center',
-    padding: 12,
   },
-  section: {
-    marginBottom: 20,
+  activeTabText: {
+    color: '#fff',
   },
-  sleepSummary: {
-    marginBottom: 20,
-  },
-  sleepTime: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 12,
-  },
-  subsectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#444',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  phaseRow: {
-    backgroundColor: '#f8f8f8',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-  },
-  phaseHeader: {
+  tabsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  phaseType: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#333',
-  },
-  phaseTime: {
-    fontSize: 14,
-    color: '#666',
-  },
-  hrvValue: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 4,
-  },
-  noData: {
-    fontSize: 14,
-    color: '#666',
-    fontStyle: 'italic',
-    textAlign: 'center',
-    padding: 12,
-  },
-  hrvSummary: {
-    backgroundColor: '#f8f8f8',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 16,
-  },
-  hrvReadingsContainer: {
-    flexDirection: 'row',
-    marginTop: 8,
-    marginBottom: 12,
-  },
-  hrvReading: {
-    backgroundColor: '#f0f0f0',
-    borderRadius: 8,
-    padding: 12,
-    marginRight: 8,
-    minWidth: 80,
-    alignItems: 'center',
-  },
-  hrvTime: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 4,
+    marginVertical: 15,
   },
   errorText: {
     color: 'red',
-    textAlign: 'center',
-    marginTop: 20,
-    padding: 10,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    marginBottom: 20,
-  },
-  headerButtons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    gap: 10,
-  },
-  refreshButton: {
-    backgroundColor: '#4CAF50',
-    padding: 8,
-    borderRadius: 8,
-    width: 35,
-    height: 35,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  refreshButtonText: {
-    fontSize: 20,
-    color: '#fff',
-    fontWeight: 'bold',
-  },
-  sourceButton: {
-    backgroundColor: '#f0f0f0',
-    padding: 8,
-    borderRadius: 8,
-  },
-  sourceButtonText: {
-    fontSize: 14,
-    color: '#333',
-  },
-  sourceButtonContainer: {
-    width: '100%',
-    gap: 16,
+    marginVertical: 10,
   },
   appleButton: {
     backgroundColor: '#000',
   },
-  likertContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 10,
-    flexWrap: 'wrap',
+  garminButton: {
+    backgroundColor: '#008ace',
   },
-  likertOption: {
-    padding: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    marginVertical: 4,
-    minWidth: '18%',
-    alignItems: 'center',
+  sourceButtonContainer: {
+    marginVertical: 20,
   },
-  likertOptionSelected: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
+  sourceButton: {
+    backgroundColor: '#555',
+    padding: 10,
+    borderRadius: 5,
+    marginVertical: 5,
   },
-  likertOptionText: {
-    fontSize: 12,
-    color: '#333',
-    textAlign: 'center',
-  },
-  likertOptionTextSelected: {
+  sourceButtonText: {
     color: '#fff',
+    fontSize: 14,
   },
-  scrollContainer: {
-    paddingBottom: 20,
-  },
-  inputLabel: {
-    fontSize: 16,
-    marginBottom: 10,
-    fontWeight: 'bold',
-  },
-  autoFillButton: {
-    backgroundColor: '#007AFF',
-    padding: 15,
-    borderRadius: 10,
-    alignItems: 'center',
-    width: '100%',
-    marginBottom: 20,
-  },
-  cancelButton: {
-    backgroundColor: '#ccc',
-  },
-  disabledButton: {
-    backgroundColor: '#cccccc',
-    opacity: 0.7,
-  },
-  formGroup: {
-    marginBottom: 20,
-  },
-  pickerContainer: {
+  dropdownButton: {
     borderWidth: 1,
     borderColor: '#ddd',
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 15,
+    borderRadius: 5,
+    padding: 12,
+    marginVertical: 5,
   },
-  picker: {
-    height: 50,
-    width: '100%',
+  dropdownButtonText: {
+    color: '#333',
+    fontSize: 16,
   },
-  submitButton: {
-    backgroundColor: '#007AFF',
+  optionsList: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 5,
+    marginTop: 5,
+    maxHeight: 200,
   },
   textArea: {
     height: 100,
     textAlignVertical: 'top',
   },
-  dropdownButton: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 5,
-    backgroundColor: '#f8f8f8',
+  formGroup: {
+    marginVertical: 12,
   },
-  dropdownButtonText: {
+  formLabel: {
     fontSize: 16,
-    color: '#333',
+    marginBottom: 5,
+    color: '#333'
   },
-  optionsList: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 10,
-    marginBottom: 15,
-    backgroundColor: '#fff',
+  inputGroup: {
+    marginVertical: 15,
+  },
+  halfInputContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  halfInput: {
+    width: '48%',
+  },
+  loadingContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  infoText: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 10,
+    fontStyle: 'italic',
   },
   optionItem: {
-    padding: 15,
+    padding: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#ddd',
+    width: '100%'
   },
   optionText: {
     fontSize: 16,
+    color: '#333'
+  },
+  selectedOption: {
+    backgroundColor: '#f5f5f5',
+  },
+  selectedOptionText: {
+    color: '#007AFF',
+  },
+  dailySurveyContainer: {
+    marginTop: 20,
+  },
+  yesNoQuestion: {
+    marginBottom: 10,
+  },
+  toggleButton: {
+    padding: 10,
+    borderWidth: 2,
+    borderColor: '#ddd',
+    borderRadius: 5,
+    marginBottom: 5,
+  },
+  toggleButtonActive: {
+    borderColor: '#007AFF',
+  },
+  toggleButtonText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  toggleButtonTextActive: {
+    color: '#007AFF',
   },
   modalFormContainer: {
     flex: 1,
@@ -581,12 +508,6 @@ const styles = StyleSheet.create({
     color: '#666',
     marginRight: 8,
   },
-  selectedOption: {
-    backgroundColor: '#e0e0e0',
-  },
-  selectedOptionText: {
-    color: '#007AFF',
-  },
   buttonWithCheckbox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -597,6 +518,210 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#fff',
     fontWeight: 'bold',
+  },
+  optionWrapper: {
+    alignItems: 'center',
+  },
+  circleOption: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  innerCircle: {
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
+    backgroundColor: '#007AFF',
+  },
+  circleSelected: {
+    borderColor: '#007AFF',
+  },
+  optionLabel: {
+    fontSize: 10,
+    color: '#333',
+    textAlign: 'center',
+    marginTop: 3,
+  },
+  labelSelected: {
+    color: '#007AFF',
+  },
+  submitButton: {
+    backgroundColor: '#007AFF',
+    marginRight: 10,
+  },
+  cancelButton: {
+    backgroundColor: '#ccc',
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  refreshButton: {
+    backgroundColor: '#4CAF50',
+    padding: 8,
+    borderRadius: 8,
+    width: 35,
+    height: 35,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  refreshButtonText: {
+    fontSize: 20,
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  hrvReadingsContainer: {
+    flexDirection: 'row',
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  hrvReading: {
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+    padding: 12,
+    marginRight: 8,
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  hrvValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#007AFF',
+  },
+  hrvTime: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
+  },
+  subsectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#444',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  noActivities: {
+    fontSize: 14,
+    color: '#666',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    padding: 12,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
+    paddingHorizontal: 10,
+  },
+  autoFillButton: {
+    backgroundColor: '#4A90E2',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 4,
+    marginRight: 10,
+    flex: 1,
+  },
+  autoFillButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  modalSubmitButton: {
+    backgroundColor: '#28a745',
+    borderRadius: 5,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    minWidth: 120,
+  },
+  modalButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  subQuestionContainer: {
+    marginTop: 10,
+    marginLeft: 20,
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  subQuestionText: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 5,
+  },
+  subOptionButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 5,
+    marginVertical: 2,
+    alignSelf: 'flex-start',
+  },
+  subOptionButtonActive: {
+    borderColor: '#007AFF',
+  },
+  subOptionText: {
+    fontSize: 14,
+    color: '#333',
+  },
+  subOptionTextActive: {
+    color: '#007AFF',
+  },
+  otherTextInput: {
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 5,
+    padding: 10,
+    marginVertical: 5,
+  },
+  emotionsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-around',
+    marginHorizontal: 10,
+    marginBottom: 20,
+  },
+  emotionButton: {
+    width: '45%',
+    padding: 10,
+    margin: 5,
+    borderWidth: 2,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  emotionEmoji: {
+    fontSize: 24,
+    marginBottom: 5,
+  },
+  emotionText: {
+    fontSize: 16,
+  },
+  emotionButtonActive: {
+    borderColor: '#007AFF',
+  },
+  emotionTextActive: {
+    color: '#007AFF',
+  },
+  rowContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  buttonDisabled: {
+    backgroundColor: '#ccc',
+  },
+  buttonTextDisabled: {
+    color: '#999',
   },
 });
 
@@ -622,6 +747,7 @@ const getOrCreateDeviceId = async (): Promise<string> => {
 
 const HomeScreen = () => {
   const router = useRouter();
+  const { dataSource, setDataSource } = useDataSource();
   const [isInitialized, setIsInitialized] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
   const [stressData, setStressData] = useState<HealthData | null>(null);
@@ -632,7 +758,43 @@ const HomeScreen = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
-  const [responses, setResponses] = useState<number[]>([0, 0, 0]);
+  const [responses, setResponses] = useState([-1, 0, 0, 0]);
+  const [otherText, setOtherText] = useState("");
+  // New daily survey response states for yes/no questions
+  const [dailySurveyResponses, setDailySurveyResponses] = useState({
+    seasonal_allergies: false,
+    sick: false,
+    alcohol: false,
+    smoking: false,
+    caffeine: false,
+    marijuana: false,
+    bright_lights: false,
+    phone_in_bed: false,
+    processed_food: false,
+    late_meal: false,
+    water_3l: false,
+    morning_sunlight: false,
+    meditation: false,
+    exercise: false,
+    exercise_type: "",
+    exercise_duration: "",
+    met_friends: false,
+    journaling: false,
+    reading: false,
+    relaxation: false,
+    relaxation_duration: "",
+    relaxation_meditation: false,
+    relaxation_breathing: false,
+    relaxation_journaling: false,
+    relaxation_music: false,
+    relaxation_other: false,
+    relaxation_other_text: "",
+    emotion_happiness: false,
+    emotion_anxiety: false,
+    emotion_sadness: false,
+    emotion_anger: false,
+    emotion_relaxation: false
+  });
   const [healthKitAvailable, setHealthKitAvailable] = useState(false);
   const [personalInfo, setPersonalInfo] = useState({
     age: null as number | null,
@@ -646,8 +808,19 @@ const HomeScreen = () => {
     allergies: "" as string,
     smoker: "" as string,
     alcohol_consumption: "" as string,
-    firstname: "" as string, // Add first name field
-    lastname: "" as string,  // Add last name field
+    firstname: "" as string,
+    lastname: "" as string,
+    marijuana_consumption: "" as string,
+    diet_type: "" as string,
+    cold_showers: "" as string,
+    meditation: "" as string,
+    sauna_use: "" as string,
+    sleep_medication: "" as string,
+    blue_light_glasses: "" as string,
+    intermittent_fasting: "" as string,
+    sleep_mask: "" as string,
+    seasonal_allergies: "" as string,
+    caffeine_consumption: "" as string,
   });
   const [garminData, setGarminData] = useState<GarminData>({
     stress: null,
@@ -657,7 +830,6 @@ const HomeScreen = () => {
     heart_rate: null
   });
 
-  const [dataSource, setDataSource] = useState<'garmin' | 'apple' | null>('apple');
   const [sourceSelectionVisible, setSourceSelectionVisible] = useState(true);
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [isModalTransitioning, setIsModalTransitioning] = useState(false);
@@ -670,17 +842,54 @@ const HomeScreen = () => {
 
   // PSS questions
   const questions = [
-    "How stressed do you feel currently?",
-    "Have you had sleep problems recently?",
-    "Do you often feel overwhelmed?"
+    "How stressed do you feel right now?",
+    "How well did you sleep last night?",
+    "How rested do you feel right now?",
+    "What is the first thing on your mind this morning?"
   ];
 
+  const getOptionsForQuestion = (questionIndex: number) => {
+    switch (questionIndex) {
+      case 0: // Stress scale 0-10
+        return Array.from({ length: 11 }, (_, i) => ({ 
+          value: i, 
+          label: i.toString() 
+        }));
+      case 1: // Sleep quality
+        return [
+          { value: 1, label: "Very Poor" },
+          { value: 2, label: "Poor" },
+          { value: 3, label: "Average" },
+          { value: 4, label: "Good" },
+          { value: 5, label: "Excellent" }
+        ];
+      case 2: // Rest feeling
+        return [
+          { value: 1, label: "Not rested at all" },
+          { value: 2, label: "Slightly rested" },
+          { value: 3, label: "Moderately rested" },
+          { value: 4, label: "Well rested" },
+          { value: 5, label: "Very well rested" }
+        ];
+      case 3: // First thing on mind
+        return [
+          { value: 1, label: "Work/School" },
+          { value: 2, label: "Personal concerns" },
+          { value: 3, label: "Excitement/Positive anticipation" },
+          { value: 4, label: "Health/Physical discomfort" },
+          { value: 5, label: "Other" }
+        ];
+      default:
+        return [];
+    }
+  };
+
   const likertOptions = [
-    { value: 1, label: "Not at all" },
-    { value: 2, label: "Slightly" },
-    { value: 3, label: "Moderately" },
-    { value: 4, label: "Strongly" },
-    { value: 5, label: "Very strongly" }
+    { value: 1, label: "1" },
+    { value: 2, label: "2" },
+    { value: 3, label: "3" },
+    { value: 4, label: "4" },
+    { value: 5, label: "5" }
   ];
 
   // Add a more sophisticated modal manager
@@ -1634,6 +1843,21 @@ const HomeScreen = () => {
     initializeApp();
     checkSurveyDate(); // Check survey date on app load
     
+    // Set up notifications
+    const setupNotifications = async () => {
+      // Request permissions for notifications
+      const hasPermission = await requestNotificationPermissions();
+      
+      if (hasPermission) {
+        // Schedule daily reminder at 9 AM
+        await scheduleDailySurveyReminder();
+      }
+    };
+    
+    setupNotifications().catch(error => {
+      console.error('Failed to set up notifications:', error);
+    });
+    
     // Also check when app comes to foreground
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active') {
@@ -1908,6 +2132,15 @@ const HomeScreen = () => {
     
     // Modify the handlePssButtonPress function to check if any modal is already open
     const handlePssButtonPress = () => {
+      // Only allow the PSS survey to open if personal info has been submitted
+      if (!personalInfoSubmitted) {
+        Alert.alert(
+          "Information Required",
+          "Please fill out your personal information first before taking the daily survey."
+        );
+        return;
+      }
+      
       if (isModalTransitioning) {
         
         return;
@@ -2036,7 +2269,7 @@ const HomeScreen = () => {
     }
     
     try {
-      if (responses.some(response => response === 0)) {
+      if (responses[0] === -1 || responses.slice(1).some(response => response === 0)) {
         Alert.alert("Error", "Please answer all questions");
         return;
       }
@@ -2050,17 +2283,58 @@ const HomeScreen = () => {
       // Prepare data
       const data = {
         responses,
+        otherText: responses[3] === 5 ? otherText : "",
+        dailySurveyResponses, // Include the daily survey responses
         timestamp: new Date(),
         deviceId,
         date: today // Store the date with the submission
       };
+      
       
       // Submit to Firestore
       const pssCollection = collection(db, "pss_responses");
       await addDoc(pssCollection, data);
       
       // Reset and close
-      setResponses([0, 0, 0]);
+      setResponses([-1, 0, 0, 0]);
+      setOtherText("");
+      
+      // Reset daily survey responses
+      setDailySurveyResponses({
+        seasonal_allergies: false,
+        sick: false,
+        alcohol: false,
+        smoking: false,
+        caffeine: false,
+        marijuana: false,
+        bright_lights: false,
+        phone_in_bed: false,
+        processed_food: false,
+        late_meal: false,
+        water_3l: false,
+        morning_sunlight: false,
+        meditation: false,
+        exercise: false,
+        exercise_type: "",
+        exercise_duration: "",
+        met_friends: false,
+        journaling: false,
+        reading: false,
+        relaxation: false,
+        relaxation_duration: "",
+        relaxation_meditation: false,
+        relaxation_breathing: false,
+        relaxation_journaling: false,
+        relaxation_music: false,
+        relaxation_other: false,
+        relaxation_other_text: "",
+        emotion_happiness: false,
+        emotion_anxiety: false,
+        emotion_sadness: false,
+        emotion_anger: false,
+        emotion_relaxation: false
+      });
+      
       setPssModalVisible(false);
       setSurveySubmitted(true); // Mark survey as submitted
       setLastSurveyDate(today); // Store the submission date in state
@@ -2129,8 +2403,19 @@ const HomeScreen = () => {
           allergies: "" as string,
           smoker: "" as string,
           alcohol_consumption: "" as string,
-          firstname: "" as string, // Add first name field
-          lastname: "" as string,  // Add last name field
+          firstname: "" as string,
+          lastname: "" as string,
+          marijuana_consumption: "" as string,
+          diet_type: "" as string,
+          cold_showers: "" as string,
+          meditation: "" as string,
+          sauna_use: "" as string,
+          sleep_medication: "" as string,
+          blue_light_glasses: "" as string,
+          intermittent_fasting: "" as string,
+          sleep_mask: "" as string,
+          seasonal_allergies: "" as string,
+          caffeine_consumption: "" as string,
         });
       }
       
@@ -2216,6 +2501,45 @@ const HomeScreen = () => {
       { label: "Regularly", value: "regularly" },
       { label: "Daily", value: "daily" }
     ];
+
+    // Marijuana consumption selection
+    const [showMarijuanaOptions, setShowMarijuanaOptions] = useState(false);
+    const marijuanaOptions = [
+      { label: "Yes", value: "yes" },
+      { label: "No", value: "no" },
+      { label: "Occasional", value: "occasional" }
+    ];
+
+    // Diet type selection
+    const [showDietOptions, setShowDietOptions] = useState(false);
+    const dietOptions = [
+      { label: "Omnivore", value: "omnivore" },
+      { label: "Vegetarian", value: "vegetarian" },
+      { label: "Vegan", value: "vegan" },
+      { label: "Pescatarian", value: "pescatarian" },
+      { label: "Keto", value: "keto" },
+      { label: "Paleo", value: "paleo" },
+      { label: "Low-carb", value: "low-carb" },
+      { label: "Mediterranean", value: "mediterranean" },
+      { label: "Other", value: "other" }
+    ];
+
+    // Yes/No options for various selections
+    const yesNoOptions = [
+      { label: "Yes", value: "yes" },
+      { label: "No", value: "no" }
+    ];
+
+    // Options visibility states for new fields
+    const [showColdShowerOptions, setShowColdShowerOptions] = useState(false);
+    const [showMeditationOptions, setShowMeditationOptions] = useState(false);
+    const [showSaunaOptions, setShowSaunaOptions] = useState(false);
+    const [showSleepMedicationOptions, setShowSleepMedicationOptions] = useState(false);
+    const [showBlueLightGlassesOptions, setShowBlueLightGlassesOptions] = useState(false);
+    const [showIntermittentFastingOptions, setShowIntermittentFastingOptions] = useState(false);
+    const [showSleepMaskOptions, setShowSleepMaskOptions] = useState(false);
+    const [showSeasonalAllergiesOptions, setShowSeasonalAllergiesOptions] = useState(false);
+    const [showCaffeineConsumptionOptions, setShowCaffeineConsumptionOptions] = useState(false);
     
     // Store local copies of relevant fields with direct initialization
     const [localPersonalInfo, setLocalPersonalInfo] = useState(() => {
@@ -2946,6 +3270,72 @@ const HomeScreen = () => {
       
     };
 
+    // Handle marijuana selection
+    const handleMarijuanaSelect = (value) => {
+      setLocalPersonalInfo(prev => ({...prev, marijuana_consumption: value}));
+      setShowMarijuanaOptions(false);
+    };
+
+    // Handle diet type selection
+    const handleDietSelect = (value) => {
+      setLocalPersonalInfo(prev => ({...prev, diet_type: value}));
+      setShowDietOptions(false);
+    };
+
+    // Handle cold shower selection
+    const handleColdShowerSelect = (value) => {
+      setLocalPersonalInfo(prev => ({...prev, cold_showers: value}));
+      setShowColdShowerOptions(false);
+    };
+
+    // Handle meditation selection
+    const handleMeditationSelect = (value) => {
+      setLocalPersonalInfo(prev => ({...prev, meditation: value}));
+      setShowMeditationOptions(false);
+    };
+
+    // Handle sauna selection
+    const handleSaunaSelect = (value) => {
+      setLocalPersonalInfo(prev => ({...prev, sauna_use: value}));
+      setShowSaunaOptions(false);
+    };
+
+    // Handle sleep medication selection
+    const handleSleepMedicationSelect = (value) => {
+      setLocalPersonalInfo(prev => ({...prev, sleep_medication: value}));
+      setShowSleepMedicationOptions(false);
+    };
+
+    // Handle blue light glasses selection
+    const handleBlueLightGlassesSelect = (value) => {
+      setLocalPersonalInfo(prev => ({...prev, blue_light_glasses: value}));
+      setShowBlueLightGlassesOptions(false);
+    };
+
+    // Handle intermittent fasting selection
+    const handleIntermittentFastingSelect = (value) => {
+      setLocalPersonalInfo(prev => ({...prev, intermittent_fasting: value}));
+      setShowIntermittentFastingOptions(false);
+    };
+
+    // Handle sleep mask selection
+    const handleSleepMaskSelect = (value) => {
+      setLocalPersonalInfo(prev => ({...prev, sleep_mask: value}));
+      setShowSleepMaskOptions(false);
+    };
+
+    // Handle seasonal allergies selection
+    const handleSeasonalAllergiesSelect = (value) => {
+      setLocalPersonalInfo(prev => ({...prev, seasonal_allergies: value}));
+      setShowSeasonalAllergiesOptions(false);
+    };
+
+    // Handle caffeine consumption selection
+    const handleCaffeineConsumptionSelect = (value) => {
+      setLocalPersonalInfo(prev => ({...prev, caffeine_consumption: value}));
+      setShowCaffeineConsumptionOptions(false);
+    };
+
     return (
       <Modal
         animationType="slide"
@@ -2961,28 +3351,45 @@ const HomeScreen = () => {
         }}
       >
         <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { maxHeight: '90%' }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Personal Information</Text>
               <TouchableOpacity onPress={handleCloseModal}>
                 <Text style={styles.closeButton}>✕</Text>
-              </TouchableOpacity>
-            </View>
-              <View style={styles.buttonContainer}>
-                <TouchableOpacity
-                  style={[styles.button, styles.submitButton]}
-                  onPress={handleAutoFill}
-                  disabled={isAutoFilling}
-                >
-                  <Text style={styles.buttonText}>
-                    {isAutoFilling ? 'Loading Data...' : 'Auto Fill'}
-                  </Text>
                 </TouchableOpacity>
               </View>
             
-            <ScrollView style={styles.modalFormContainer}>
+            <ScrollView 
+              style={{ maxHeight: '90%' }}
+              showsVerticalScrollIndicator={true}
+              contentContainerStyle={{ paddingBottom: 30 }}
+            >
               <View style={styles.formGroup}>
-                <Text style={styles.label}>Age</Text>
+                <Text style={styles.formLabel}>First Name</Text>
+                <TextInput
+                  style={styles.input}
+                  value={localPersonalInfo.firstname || ''}
+                  onChangeText={(text) => setLocalPersonalInfo(prev => ({...prev, firstname: text}))}
+                  placeholder="First Name"
+                  returnKeyType="done"
+                  blurOnSubmit={true}
+                />
+              </View>
+              
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Last Name</Text>
+                <TextInput
+                  style={styles.input}
+                  value={localPersonalInfo.lastname || ''}
+                  onChangeText={(text) => setLocalPersonalInfo(prev => ({...prev, lastname: text}))}
+                  placeholder="Last Name"
+                  returnKeyType="done"
+                  blurOnSubmit={true}
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Age</Text>
                 <TextInput
                   style={styles.input}
                   value={localPersonalInfo.age ? String(localPersonalInfo.age) : ''}
@@ -2998,31 +3405,7 @@ const HomeScreen = () => {
               </View>
               
               <View style={styles.formGroup}>
-                <Text style={styles.label}>First Name</Text>
-                <TextInput
-                  style={styles.input}
-                  value={localPersonalInfo.firstname || ''}
-                  onChangeText={(text) => setLocalPersonalInfo(prev => ({...prev, firstname: text}))}
-                  placeholder="First Name"
-                  returnKeyType="done"
-                  blurOnSubmit={true}
-                />
-              </View>
-              
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Last Name</Text>
-                <TextInput
-                  style={styles.input}
-                  value={localPersonalInfo.lastname || ''}
-                  onChangeText={(text) => setLocalPersonalInfo(prev => ({...prev, lastname: text}))}
-                  placeholder="Last Name"
-                  returnKeyType="done"
-                  blurOnSubmit={true}
-                />
-              </View>
-              
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Gender</Text>
+                <Text style={styles.formLabel}>Gender</Text>
                 <TouchableOpacity 
                   key={`gender-dropdown-${selectedGender || 'unselected'}`}
                   style={[
@@ -3069,7 +3452,7 @@ const HomeScreen = () => {
               </View>
               
               <View style={styles.formGroup}>
-                <Text style={styles.label}>Height (cm)</Text>
+                <Text style={styles.formLabel}>Height (cm)</Text>
                 <TextInput
                   style={styles.input}
                   value={localPersonalInfo.height ? String(localPersonalInfo.height) : ''}
@@ -3085,7 +3468,7 @@ const HomeScreen = () => {
               </View>
               
               <View style={styles.formGroup}>
-                <Text style={styles.label}>Weight (kg)</Text>
+                <Text style={styles.formLabel}>Weight (kg)</Text>
                 <TextInput
                   style={styles.input}
                   value={localPersonalInfo.weight ? String(localPersonalInfo.weight) : ''}
@@ -3101,7 +3484,7 @@ const HomeScreen = () => {
               </View>
               
               <View style={styles.formGroup}>
-                <Text style={styles.label}>Fitness Level (1-10)</Text>
+                <Text style={styles.formLabel}>Fitness Level (1-10)</Text>
                 <TextInput
                   style={styles.input}
                   value={(() => {
@@ -3122,7 +3505,7 @@ const HomeScreen = () => {
               </View>
               
               <View style={styles.formGroup}>
-                <Text style={styles.label}>Stress Level (1-10)</Text>
+                <Text style={styles.formLabel}>Stress Level (1-10)</Text>
                 <TextInput
                   style={styles.input}
                   value={localPersonalInfo.stress_level ? String(localPersonalInfo.stress_level) : ''}
@@ -3138,7 +3521,7 @@ const HomeScreen = () => {
               </View>
               
               <View style={styles.formGroup}>
-                <Text style={styles.label}>Sleep Quality (1-10)</Text>
+                <Text style={styles.formLabel}>Sleep Quality (1-10)</Text>
                 <TextInput
                   style={styles.input}
                   value={localPersonalInfo.sleep_quality ? String(localPersonalInfo.sleep_quality) : ''}
@@ -3154,7 +3537,7 @@ const HomeScreen = () => {
               </View>
               
               <View style={styles.formGroup}>
-                <Text style={styles.label}>Pre-existing Conditions</Text>
+                <Text style={styles.formLabel}>Pre-existing Conditions</Text>
                 <TextInput
                   style={[styles.input, styles.textArea]}
                   value={localPersonalInfo.pre_existing_conditions}
@@ -3167,7 +3550,7 @@ const HomeScreen = () => {
               </View>
               
               <View style={styles.formGroup}>
-                <Text style={styles.label}>Allergies</Text>
+                <Text style={styles.formLabel}>Allergies</Text>
                 <TextInput
                   style={[styles.input, styles.textArea]}
                   value={localPersonalInfo.allergies}
@@ -3178,9 +3561,104 @@ const HomeScreen = () => {
                   blurOnSubmit={true}
                 />
               </View>
+
+                            {/* Seasonal Allergies */}
+                            <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Seasonal Allergies</Text>
+                <TouchableOpacity 
+                  style={[
+                    styles.dropdownButton,
+                    localPersonalInfo.seasonal_allergies ? styles.dropdownButtonSelected : {}
+                  ]}
+                  onPress={() => setShowSeasonalAllergiesOptions(!showSeasonalAllergiesOptions)}
+                >
+                  <View style={styles.dropdownContent}>
+                    <Text style={styles.dropdownArrow}>{showSeasonalAllergiesOptions ? '▲' : '▼'}</Text>
+                    <Text style={[
+                      styles.dropdownButtonText,
+                      localPersonalInfo.seasonal_allergies ? styles.dropdownButtonTextSelected : {}
+                    ]}>
+                      {localPersonalInfo.seasonal_allergies ? 
+                        yesNoOptions.find(option => option.value === localPersonalInfo.seasonal_allergies)?.label || 'Please select' : 
+                        'Please select'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+                
+                {showSeasonalAllergiesOptions && (
+                  <View style={styles.optionsList}>
+                    {yesNoOptions.map((option) => (
+                      <TouchableOpacity
+                        key={option.value}
+                        style={[
+                          styles.optionItem,
+                          localPersonalInfo.seasonal_allergies === option.value ? styles.selectedOption : {}
+                        ]}
+                        onPress={() => handleSeasonalAllergiesSelect(option.value)}
+                      >
+                        <Text style={[
+                          styles.optionText,
+                          localPersonalInfo.seasonal_allergies === option.value ? styles.selectedOptionText : {}
+                        ]}>
+                          {option.label}
+                          {localPersonalInfo.seasonal_allergies === option.value && ' ✓'}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+
+              {/* Caffeine Consumption */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Caffeine Consumption</Text>
+                <TouchableOpacity 
+                  style={[
+                    styles.dropdownButton,
+                    localPersonalInfo.caffeine_consumption ? styles.dropdownButtonSelected : {}
+                  ]}
+                  onPress={() => setShowCaffeineConsumptionOptions(!showCaffeineConsumptionOptions)}
+                >
+                  <View style={styles.dropdownContent}>
+                    <Text style={styles.dropdownArrow}>{showCaffeineConsumptionOptions ? '▲' : '▼'}</Text>
+                    <Text style={[
+                      styles.dropdownButtonText,
+                      localPersonalInfo.caffeine_consumption ? styles.dropdownButtonTextSelected : {}
+                    ]}>
+                      {localPersonalInfo.caffeine_consumption ? 
+                        yesNoOptions.find(option => option.value === localPersonalInfo.caffeine_consumption)?.label || 'Please select' : 
+                        'Please select'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+                
+                {showCaffeineConsumptionOptions && (
+                  <View style={styles.optionsList}>
+                    {yesNoOptions.map((option) => (
+                      <TouchableOpacity
+                        key={option.value}
+                        style={[
+                          styles.optionItem,
+                          localPersonalInfo.caffeine_consumption === option.value ? styles.selectedOption : {}
+                        ]}
+                        onPress={() => handleCaffeineConsumptionSelect(option.value)}
+                      >
+                        <Text style={[
+                          styles.optionText,
+                          localPersonalInfo.caffeine_consumption === option.value ? styles.selectedOptionText : {}
+                        ]}>
+                          {option.label}
+                          {localPersonalInfo.caffeine_consumption === option.value && ' ✓'}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
               
               <View style={styles.formGroup}>
-                <Text style={styles.label}>Smoker</Text>
+                <Text style={styles.formLabel}>Smoker</Text>
                 <TouchableOpacity 
                   style={[
                     styles.dropdownButton,
@@ -3226,7 +3704,7 @@ const HomeScreen = () => {
               </View>
               
               <View style={styles.formGroup}>
-                <Text style={styles.label}>Alcohol Consumption</Text>
+                <Text style={styles.formLabel}>Alcohol Consumption</Text>
                 <TouchableOpacity 
                   style={[
                     styles.dropdownButton,
@@ -3271,23 +3749,406 @@ const HomeScreen = () => {
                 )}
               </View>
               
-            
-              
-              <View style={styles.buttonContainer}>
+              {/* Marijuana Consumption */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Marijuana Consumption</Text>
                 <TouchableOpacity 
-                  style={[styles.button, styles.submitButton]} 
-                  onPress={handleSubmit}
+                  style={[
+                    styles.dropdownButton,
+                    localPersonalInfo.marijuana_consumption ? styles.dropdownButtonSelected : {}
+                  ]}
+                  onPress={() => setShowMarijuanaOptions(!showMarijuanaOptions)}
                 >
-                  <Text style={styles.buttonText}>Send</Text>
+                  <View style={styles.dropdownContent}>
+                    <Text style={styles.dropdownArrow}>{showMarijuanaOptions ? '▲' : '▼'}</Text>
+                    <Text style={[
+                      styles.dropdownButtonText,
+                      localPersonalInfo.marijuana_consumption ? styles.dropdownButtonTextSelected : {}
+                    ]}>
+                      {localPersonalInfo.marijuana_consumption ? 
+                        marijuanaOptions.find(option => option.value === localPersonalInfo.marijuana_consumption)?.label || 'Please select' : 
+                        'Please select'}
+                    </Text>
+                  </View>
                 </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.button, styles.cancelButton]} 
-                  onPress={handleCancel}
-                >
-                  <Text style={styles.buttonText}>Cancel</Text>
-                </TouchableOpacity>
+                
+                {showMarijuanaOptions && (
+                  <View style={styles.optionsList}>
+                    {marijuanaOptions.map((option) => (
+                      <TouchableOpacity
+                        key={option.value}
+                        style={[
+                          styles.optionItem,
+                          localPersonalInfo.marijuana_consumption === option.value ? styles.selectedOption : {}
+                        ]}
+                        onPress={() => handleMarijuanaSelect(option.value)}
+                      >
+                        <Text style={[
+                          styles.optionText,
+                          localPersonalInfo.marijuana_consumption === option.value ? styles.selectedOptionText : {}
+                        ]}>
+                          {option.label}
+                          {localPersonalInfo.marijuana_consumption === option.value && ' ✓'}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
               </View>
+
+              {/* Diet Type */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Diet Type</Text>
+                <TouchableOpacity 
+                  style={[
+                    styles.dropdownButton,
+                    localPersonalInfo.diet_type ? styles.dropdownButtonSelected : {}
+                  ]}
+                  onPress={() => setShowDietOptions(!showDietOptions)}
+                >
+                  <View style={styles.dropdownContent}>
+                    <Text style={styles.dropdownArrow}>{showDietOptions ? '▲' : '▼'}</Text>
+                    <Text style={[
+                      styles.dropdownButtonText,
+                      localPersonalInfo.diet_type ? styles.dropdownButtonTextSelected : {}
+                    ]}>
+                      {localPersonalInfo.diet_type ? 
+                        dietOptions.find(option => option.value === localPersonalInfo.diet_type)?.label || 'Please select' : 
+                        'Please select'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+                
+                {showDietOptions && (
+                  <View style={styles.optionsList}>
+                    {dietOptions.map((option) => (
+                <TouchableOpacity 
+                        key={option.value}
+                        style={[
+                          styles.optionItem,
+                          localPersonalInfo.diet_type === option.value ? styles.selectedOption : {}
+                        ]}
+                        onPress={() => handleDietSelect(option.value)}
+                      >
+                        <Text style={[
+                          styles.optionText,
+                          localPersonalInfo.diet_type === option.value ? styles.selectedOptionText : {}
+                        ]}>
+                          {option.label}
+                          {localPersonalInfo.diet_type === option.value && ' ✓'}
+                        </Text>
+                </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+                            {/* Intermittent Fasting */}
+                            <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Intermittent Fasting</Text>
+                <TouchableOpacity 
+                  style={[
+                    styles.dropdownButton,
+                    localPersonalInfo.intermittent_fasting ? styles.dropdownButtonSelected : {}
+                  ]}
+                  onPress={() => setShowIntermittentFastingOptions(!showIntermittentFastingOptions)}
+                >
+                  <View style={styles.dropdownContent}>
+                    <Text style={styles.dropdownArrow}>{showIntermittentFastingOptions ? '▲' : '▼'}</Text>
+                    <Text style={[
+                      styles.dropdownButtonText,
+                      localPersonalInfo.intermittent_fasting ? styles.dropdownButtonTextSelected : {}
+                    ]}>
+                      {localPersonalInfo.intermittent_fasting ? 
+                        yesNoOptions.find(option => option.value === localPersonalInfo.intermittent_fasting)?.label || 'Please select' : 
+                        'Please select'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+                
+                {showIntermittentFastingOptions && (
+                  <View style={styles.optionsList}>
+                    {yesNoOptions.map((option) => (
+                      <TouchableOpacity
+                        key={option.value}
+                        style={[
+                          styles.optionItem,
+                          localPersonalInfo.intermittent_fasting === option.value ? styles.selectedOption : {}
+                        ]}
+                        onPress={() => handleIntermittentFastingSelect(option.value)}
+                      >
+                        <Text style={[
+                          styles.optionText,
+                          localPersonalInfo.intermittent_fasting === option.value ? styles.selectedOptionText : {}
+                        ]}>
+                          {option.label}
+                          {localPersonalInfo.intermittent_fasting === option.value && ' ✓'}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              {/* Cold Showers */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Cold Showers / Ice Baths</Text>
+                <TouchableOpacity 
+                  style={[
+                    styles.dropdownButton,
+                    localPersonalInfo.cold_showers ? styles.dropdownButtonSelected : {}
+                  ]}
+                  onPress={() => setShowColdShowerOptions(!showColdShowerOptions)}
+                >
+                  <View style={styles.dropdownContent}>
+                    <Text style={styles.dropdownArrow}>{showColdShowerOptions ? '▲' : '▼'}</Text>
+                    <Text style={[
+                      styles.dropdownButtonText,
+                      localPersonalInfo.cold_showers ? styles.dropdownButtonTextSelected : {}
+                    ]}>
+                      {localPersonalInfo.cold_showers ? 
+                        yesNoOptions.find(option => option.value === localPersonalInfo.cold_showers)?.label || 'Please select' : 
+                        'Please select'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+                
+                {showColdShowerOptions && (
+                  <View style={styles.optionsList}>
+                    {yesNoOptions.map((option) => (
+                      <TouchableOpacity
+                        key={option.value}
+                        style={[
+                          styles.optionItem,
+                          localPersonalInfo.cold_showers === option.value ? styles.selectedOption : {}
+                        ]}
+                        onPress={() => handleColdShowerSelect(option.value)}
+                      >
+                        <Text style={[
+                          styles.optionText,
+                          localPersonalInfo.cold_showers === option.value ? styles.selectedOptionText : {}
+                        ]}>
+                          {option.label}
+                          {localPersonalInfo.cold_showers === option.value && ' ✓'}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              {/* Meditation */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Meditation Practice</Text>
+                <TouchableOpacity 
+                  style={[
+                    styles.dropdownButton,
+                    localPersonalInfo.meditation ? styles.dropdownButtonSelected : {}
+                  ]}
+                  onPress={() => setShowMeditationOptions(!showMeditationOptions)}
+                >
+                  <View style={styles.dropdownContent}>
+                    <Text style={styles.dropdownArrow}>{showMeditationOptions ? '▲' : '▼'}</Text>
+                    <Text style={[
+                      styles.dropdownButtonText,
+                      localPersonalInfo.meditation ? styles.dropdownButtonTextSelected : {}
+                    ]}>
+                      {localPersonalInfo.meditation ? 
+                        yesNoOptions.find(option => option.value === localPersonalInfo.meditation)?.label || 'Please select' : 
+                        'Please select'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+                
+                {showMeditationOptions && (
+                  <View style={styles.optionsList}>
+                    {yesNoOptions.map((option) => (
+                      <TouchableOpacity
+                        key={option.value}
+                        style={[
+                          styles.optionItem,
+                          localPersonalInfo.meditation === option.value ? styles.selectedOption : {}
+                        ]}
+                        onPress={() => handleMeditationSelect(option.value)}
+                      >
+                        <Text style={[
+                          styles.optionText,
+                          localPersonalInfo.meditation === option.value ? styles.selectedOptionText : {}
+                        ]}>
+                          {option.label}
+                          {localPersonalInfo.meditation === option.value && ' ✓'}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              {/* Sauna Use */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Regular Sauna Use</Text>
+                <TouchableOpacity 
+                  style={[
+                    styles.dropdownButton,
+                    localPersonalInfo.sauna_use ? styles.dropdownButtonSelected : {}
+                  ]}
+                  onPress={() => setShowSaunaOptions(!showSaunaOptions)}
+                >
+                  <View style={styles.dropdownContent}>
+                    <Text style={styles.dropdownArrow}>{showSaunaOptions ? '▲' : '▼'}</Text>
+                    <Text style={[
+                      styles.dropdownButtonText,
+                      localPersonalInfo.sauna_use ? styles.dropdownButtonTextSelected : {}
+                    ]}>
+                      {localPersonalInfo.sauna_use ? 
+                        yesNoOptions.find(option => option.value === localPersonalInfo.sauna_use)?.label || 'Please select' : 
+                        'Please select'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+                
+                {showSaunaOptions && (
+                  <View style={styles.optionsList}>
+                    {yesNoOptions.map((option) => (
+                      <TouchableOpacity
+                        key={option.value}
+                        style={[
+                          styles.optionItem,
+                          localPersonalInfo.sauna_use === option.value ? styles.selectedOption : {}
+                        ]}
+                        onPress={() => handleSaunaSelect(option.value)}
+                      >
+                        <Text style={[
+                          styles.optionText,
+                          localPersonalInfo.sauna_use === option.value ? styles.selectedOptionText : {}
+                        ]}>
+                          {option.label}
+                          {localPersonalInfo.sauna_use === option.value && ' ✓'}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              {/* Sleep Medication */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Sleep Medication</Text>
+                <TouchableOpacity 
+                  style={[
+                    styles.dropdownButton,
+                    localPersonalInfo.sleep_medication ? styles.dropdownButtonSelected : {}
+                  ]}
+                  onPress={() => setShowSleepMedicationOptions(!showSleepMedicationOptions)}
+                >
+                  <View style={styles.dropdownContent}>
+                    <Text style={styles.dropdownArrow}>{showSleepMedicationOptions ? '▲' : '▼'}</Text>
+                    <Text style={[
+                      styles.dropdownButtonText,
+                      localPersonalInfo.sleep_medication ? styles.dropdownButtonTextSelected : {}
+                    ]}>
+                      {localPersonalInfo.sleep_medication ? 
+                        yesNoOptions.find(option => option.value === localPersonalInfo.sleep_medication)?.label || 'Please select' : 
+                        'Please select'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+                
+                {showSleepMedicationOptions && (
+                  <View style={styles.optionsList}>
+                    {yesNoOptions.map((option) => (
+                      <TouchableOpacity
+                        key={option.value}
+                        style={[
+                          styles.optionItem,
+                          localPersonalInfo.sleep_medication === option.value ? styles.selectedOption : {}
+                        ]}
+                        onPress={() => handleSleepMedicationSelect(option.value)}
+                      >
+                        <Text style={[
+                          styles.optionText,
+                          localPersonalInfo.sleep_medication === option.value ? styles.selectedOptionText : {}
+                        ]}>
+                          {option.label}
+                          {localPersonalInfo.sleep_medication === option.value && ' ✓'}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              {/* Blue Light Glasses */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Blue Light Blocking Glasses</Text>
+                <TouchableOpacity 
+                  style={[
+                    styles.dropdownButton,
+                    localPersonalInfo.blue_light_glasses ? styles.dropdownButtonSelected : {}
+                  ]}
+                  onPress={() => setShowBlueLightGlassesOptions(!showBlueLightGlassesOptions)}
+                >
+                  <View style={styles.dropdownContent}>
+                    <Text style={styles.dropdownArrow}>{showBlueLightGlassesOptions ? '▲' : '▼'}</Text>
+                    <Text style={[
+                      styles.dropdownButtonText,
+                      localPersonalInfo.blue_light_glasses ? styles.dropdownButtonTextSelected : {}
+                    ]}>
+                      {localPersonalInfo.blue_light_glasses ? 
+                        yesNoOptions.find(option => option.value === localPersonalInfo.blue_light_glasses)?.label || 'Please select' : 
+                        'Please select'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+                
+                {showBlueLightGlassesOptions && (
+                  <View style={styles.optionsList}>
+                    {yesNoOptions.map((option) => (
+                      <TouchableOpacity
+                        key={option.value}
+                        style={[
+                          styles.optionItem,
+                          localPersonalInfo.blue_light_glasses === option.value ? styles.selectedOption : {}
+                        ]}
+                        onPress={() => handleBlueLightGlassesSelect(option.value)}
+                      >
+                        <Text style={[
+                          styles.optionText,
+                          localPersonalInfo.blue_light_glasses === option.value ? styles.selectedOptionText : {}
+                        ]}>
+                          {option.label}
+                          {localPersonalInfo.blue_light_glasses === option.value && ' ✓'}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+
+
+              
+              
             </ScrollView>
+            
+            <View style={styles.modalButtons}>
+              <TouchableOpacity 
+                style={styles.autoFillButton} 
+                onPress={handleAutoFill}
+                disabled={isAutoFilling}
+              >
+                <Text style={styles.modalButtonText}>
+                  {isAutoFilling ? "Auto-filling..." : "Autofill Health Data"}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.modalSubmitButton} 
+                onPress={handleSubmit}
+              >
+                <Text style={styles.modalButtonText}>Submit</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -3728,18 +4589,13 @@ const HomeScreen = () => {
          
 
 <View style={styles.buttonContainer}>
-            <TouchableOpacity 
-              style={styles.button}
-              onPress={handlePssButtonPress}
-            >
-              <View style={styles.buttonWithCheckbox}>
-                <Text style={styles.buttonText}>PSS Survey</Text>
-                {surveySubmitted && <Text style={styles.checkmark}>✓</Text>}
-              </View>
-            </TouchableOpacity>
+            
 
             <TouchableOpacity 
-              style={styles.button}
+              style={[
+                styles.button,
+                personalInfoSubmitted ? styles.buttonPressed : {}
+              ]}
               onPress={handlePersonalInfoButtonPress}
             >
               <View style={styles.buttonWithCheckbox}>
@@ -3749,13 +4605,16 @@ const HomeScreen = () => {
             </TouchableOpacity>
             
             <TouchableOpacity 
-              style={[styles.button, { backgroundColor: '#4CAF50' }]}
+              style={[
+                styles.button,
+                historyDataUploaded ? styles.buttonPressed : {}
+              ]}
               onPress={async () => {
                 // Retrieve credentials before the function call
                 const storedEmail = email || await SecureStore.getItemAsync("garmin_email") || "";
                 const storedPassword = password || await SecureStore.getItemAsync("garmin_password") || "";
                 
-                uploadHistoricalData(
+                const uploadSuccess = await uploadHistoricalData(
                   db, 
                   getOrCreateDeviceId, 
                   setLoading,
@@ -3796,18 +4655,52 @@ const HomeScreen = () => {
                     email: storedEmail,
                     password: storedPassword
                   }
-                ).then(() => {
-                  // Set uploaded flag on success
+                );
+                
+                // Only set the uploaded flag if the upload was successful
+                if (uploadSuccess) {
                   setHistoryDataUploaded(true);
-                });
+                }
               }}
             >
               <View style={styles.buttonWithCheckbox}>
-                <Text style={styles.buttonText}>Upload 3 Months Data</Text>
+                <Text style={styles.buttonText}>Upload Historical Data</Text>
                 {historyDataUploaded && <Text style={styles.checkmark}>✓</Text>}
               </View>
             </TouchableOpacity>
+            <TouchableOpacity 
+              style={[
+                styles.button, 
+                surveySubmitted ? styles.buttonPressed : {},
+                !personalInfoSubmitted ? styles.buttonDisabled : {}
+              ]}
+              onPress={personalInfoSubmitted ? handlePssButtonPress : () => {
+                Alert.alert(
+                  "Information Required",
+                  "Please fill out your personal information first before taking the daily survey."
+                );
+              }}
+            >
+              <View style={styles.buttonWithCheckbox}>
+                <Text style={[
+                  styles.buttonText,
+                  !personalInfoSubmitted ? styles.buttonTextDisabled : {}
+                ]}>Daily Survey</Text>
+                {surveySubmitted && <Text style={styles.checkmark}>✓</Text>}
+              </View>
+            </TouchableOpacity>
           </View>
+          
+          {/* Add notification time picker component */}
+          <NotificationTimePicker 
+            onTimeSet={(hour, minute) => {
+              console.log(`Notification time set to ${hour}:${minute}`);
+            }}
+            onSubmit={() => {
+              console.log('Notification time picker submitted');
+              // Could add additional state management here if needed
+            }}
+          />
 
           {/* Sleep Section */}
           <View style={styles.section}>
@@ -4046,11 +4939,12 @@ const HomeScreen = () => {
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>PSS Survey</Text>
+              <Text style={styles.modalTitle}>Daily Survey</Text>
               <TouchableOpacity onPress={() => setPssModalVisible(false)}>
                 <Text style={styles.closeButton}>✕</Text>
               </TouchableOpacity>
             </View>
+            <ScrollView>
             <FlatList
               data={questions}
               keyExtractor={(item, index) => index.toString()}
@@ -4058,30 +4952,617 @@ const HomeScreen = () => {
                 <View style={styles.questionContainer}>
                   <Text style={styles.questionText}>{item}</Text>
                   <View style={styles.likertContainer}>
-                    {likertOptions.map((option) => (
+                    {getOptionsForQuestion(index).map((option) => (
                       <TouchableOpacity
                         key={option.value}
                         style={[
-                          styles.likertOption,
-                          responses[index] === option.value && styles.likertOptionSelected
+                            styles.optionWrapper,
+                            index === 0 ? { width: '9%' } : { width: '19%' }
                         ]}
                         onPress={() => handleResponseChange(option.value, index)}
                       >
-                        <Text style={[
-                          styles.likertOptionText,
-                          responses[index] === option.value && styles.likertOptionTextSelected
-                        ]}>
+                          <View
+                            style={[
+                              styles.circleOption,
+                              index === 0 ? { 
+                                width: 15, 
+                                height: 15, 
+                                borderRadius: 7.5 
+                              } : {},
+                              responses[index] === option.value && styles.circleSelected
+                            ]}
+                          >
+                            {responses[index] === option.value && (
+                              <View 
+                                style={[
+                                  styles.innerCircle,
+                                  index === 0 ? { 
+                                    width: 7, 
+                                    height: 7, 
+                                    borderRadius: 3.5 
+                                  } : {}
+                                ]} 
+                              />
+                            )}
+                          </View>
+                          <Text
+                            style={[
+                              styles.optionLabel,
+                              index === 0 ? { fontSize: 8 } : {},
+                              responses[index] === option.value && styles.labelSelected
+                            ]}
+                          >
                           {option.label}
                         </Text>
                       </TouchableOpacity>
                     ))}
                   </View>
+                    {index === 3 && responses[index] === 5 && (
+                      <View style={{marginTop: 10}}>
+                        <TextInput
+                          style={styles.input}
+                          placeholder="Please specify..."
+                          value={otherText}
+                          onChangeText={setOtherText}
+                        />
                 </View>
               )}
-            />
-            <TouchableOpacity style={styles.button} onPress={submitSurvey}>
-              <Text style={styles.buttonText}>Submit</Text>
-            </TouchableOpacity>
+                  </View>
+                )}
+                scrollEnabled={false}
+              />
+              
+              <View style={styles.dailySurveyContainer}>
+                <Text style={styles.sectionTitle}>What happened yesterday?</Text>
+                
+                {/* Morning Sunlight */}
+                <View style={styles.yesNoQuestion}>
+                  <Text style={styles.questionText}>☀️ Got morning sunlight (within 15min of waking)?</Text>
+                  <TouchableOpacity 
+                    style={[
+                      styles.toggleButton, 
+                      dailySurveyResponses.morning_sunlight && styles.toggleButtonActive
+                    ]}
+                    onPress={() => setDailySurveyResponses(prev => ({...prev, morning_sunlight: !prev.morning_sunlight}))}
+                  >
+                    <Text style={[
+                      styles.toggleButtonText, 
+                      dailySurveyResponses.morning_sunlight && styles.toggleButtonTextActive
+                    ]}>
+                      {dailySurveyResponses.morning_sunlight ? 'Yes' : 'No'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Seasonal Allergies - only show if user has seasonal allergies */}
+                {personalInfo.seasonal_allergies === 'yes' && (
+                <View style={styles.yesNoQuestion}>
+                  <Text style={styles.questionText}>🤧 Seasonal allergies?</Text>
+                  <TouchableOpacity 
+                    style={[
+                      styles.toggleButton, 
+                      dailySurveyResponses.seasonal_allergies && styles.toggleButtonActive
+                    ]}
+                    onPress={() => setDailySurveyResponses(prev => ({...prev, seasonal_allergies: !prev.seasonal_allergies}))}
+                  >
+                    <Text style={[
+                      styles.toggleButtonText, 
+                      dailySurveyResponses.seasonal_allergies && styles.toggleButtonTextActive
+                    ]}>
+                      {dailySurveyResponses.seasonal_allergies ? 'Yes' : 'No'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                )}
+                
+                {/* Sick Today */}
+                <View style={styles.yesNoQuestion}>
+                  <Text style={styles.questionText}>🤒 Felt sick?</Text>
+                  <TouchableOpacity 
+                    style={[
+                      styles.toggleButton, 
+                      dailySurveyResponses.sick && styles.toggleButtonActive
+                    ]}
+                    onPress={() => setDailySurveyResponses(prev => ({...prev, sick: !prev.sick}))}
+                  >
+                    <Text style={[
+                      styles.toggleButtonText, 
+                      dailySurveyResponses.sick && styles.toggleButtonTextActive
+                    ]}>
+                      {dailySurveyResponses.sick ? 'Yes' : 'No'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                
+                {/* Caffeine - only show if user consumes caffeine */}
+                {personalInfo.caffeine_consumption === 'yes' && (
+                <View style={styles.yesNoQuestion}>
+                  <Text style={styles.questionText}>☕ Consumed caffeine after noon?</Text>
+                  <TouchableOpacity 
+                    style={[
+                      styles.toggleButton, 
+                      dailySurveyResponses.caffeine && styles.toggleButtonActive
+                    ]}
+                    onPress={() => setDailySurveyResponses(prev => ({...prev, caffeine: !prev.caffeine}))}
+                  >
+                    <Text style={[
+                      styles.toggleButtonText, 
+                      dailySurveyResponses.caffeine && styles.toggleButtonTextActive
+                    ]}>
+                      {dailySurveyResponses.caffeine ? 'Yes' : 'No'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                )}
+
+                
+                
+                {/* 3L Water */}
+                <View style={styles.yesNoQuestion}>
+                  <Text style={styles.questionText}>💧 Drank more than 3L of water?</Text>
+                  <TouchableOpacity 
+                    style={[
+                      styles.toggleButton, 
+                      dailySurveyResponses.water_3l && styles.toggleButtonActive
+                    ]}
+                    onPress={() => setDailySurveyResponses(prev => ({...prev, water_3l: !prev.water_3l}))}
+                  >
+                    <Text style={[
+                      styles.toggleButtonText, 
+                      dailySurveyResponses.water_3l && styles.toggleButtonTextActive
+                    ]}>
+                      {dailySurveyResponses.water_3l ? 'Yes' : 'No'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                
+                {/* Processed Food */}
+                <View style={styles.yesNoQuestion}>
+                  <Text style={styles.questionText}>🍔 Ate processed food?</Text>
+                  <TouchableOpacity 
+                    style={[
+                      styles.toggleButton, 
+                      dailySurveyResponses.processed_food && styles.toggleButtonActive
+                    ]}
+                    onPress={() => setDailySurveyResponses(prev => ({...prev, processed_food: !prev.processed_food}))}
+                  >
+                    <Text style={[
+                      styles.toggleButtonText, 
+                      dailySurveyResponses.processed_food && styles.toggleButtonTextActive
+                    ]}>
+                      {dailySurveyResponses.processed_food ? 'Yes' : 'No'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Only show meditation question if they practice meditation */}
+                {personalInfo.meditation === 'yes' && (
+                  <View style={styles.yesNoQuestion}>
+                    <Text style={styles.questionText}>🧘 Meditate?</Text>
+                    <TouchableOpacity 
+                      style={[
+                        styles.toggleButton, 
+                        dailySurveyResponses.meditation && styles.toggleButtonActive
+                      ]}
+                      onPress={() => setDailySurveyResponses(prev => ({...prev, meditation: !prev.meditation}))}
+                    >
+                      <Text style={[
+                        styles.toggleButtonText, 
+                        dailySurveyResponses.meditation && styles.toggleButtonTextActive
+                      ]}>
+                        {dailySurveyResponses.meditation ? 'Yes' : 'No'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+                
+                {/* Exercise */}
+                <View style={styles.yesNoQuestion}>
+                  <Text style={styles.questionText}>🏋️‍♀️ Exercised?</Text>
+                  <TouchableOpacity 
+                    style={[
+                      styles.toggleButton, 
+                      dailySurveyResponses.exercise && styles.toggleButtonActive
+                    ]}
+                    onPress={() => setDailySurveyResponses(prev => ({...prev, exercise: !prev.exercise}))}
+                  >
+                    <Text style={[
+                      styles.toggleButtonText, 
+                      dailySurveyResponses.exercise && styles.toggleButtonTextActive
+                    ]}>
+                      {dailySurveyResponses.exercise ? 'Yes' : 'No'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                
+                {/* Exercise follow-up questions - only show when exercise is true */}
+                {dailySurveyResponses.exercise && (
+                  <View style={styles.subQuestionContainer}>
+                    <View style={styles.formGroup}>
+                      <Text style={styles.subQuestionText}>What did you do?</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Type of exercise"
+                        value={dailySurveyResponses.exercise_type}
+                        onChangeText={(text) => setDailySurveyResponses(prev => ({...prev, exercise_type: text}))}
+                      />
+                    </View>
+                    
+                    <View style={styles.formGroup}>
+                      <Text style={styles.subQuestionText}>How long? (minutes)</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Duration in minutes"
+                        keyboardType="number-pad"
+                        value={dailySurveyResponses.exercise_duration}
+                        onChangeText={(text) => setDailySurveyResponses(prev => ({...prev, exercise_duration: text}))}
+                      />
+                    </View>
+                  </View>
+                )}
+                
+                {/* Met Friends */}
+                <View style={styles.yesNoQuestion}>
+                  <Text style={styles.questionText}>👥 Met close friends?</Text>
+                  <TouchableOpacity 
+                    style={[
+                      styles.toggleButton, 
+                      dailySurveyResponses.met_friends && styles.toggleButtonActive
+                    ]}
+                    onPress={() => setDailySurveyResponses(prev => ({...prev, met_friends: !prev.met_friends}))}
+                  >
+                    <Text style={[
+                      styles.toggleButtonText, 
+                      dailySurveyResponses.met_friends && styles.toggleButtonTextActive
+                    ]}>
+                      {dailySurveyResponses.met_friends ? 'Yes' : 'No'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                
+                {/* Relaxation Techniques */}
+                <View style={styles.yesNoQuestion}>
+                  <Text style={styles.questionText}>🧘‍♂️ Engaged in relaxation techniques?</Text>
+                  <TouchableOpacity 
+                    style={[
+                      styles.toggleButton, 
+                      dailySurveyResponses.relaxation && styles.toggleButtonActive
+                    ]}
+                    onPress={() => setDailySurveyResponses(prev => ({...prev, relaxation: !prev.relaxation}))}
+                  >
+                    <Text style={[
+                      styles.toggleButtonText, 
+                      dailySurveyResponses.relaxation && styles.toggleButtonTextActive
+                    ]}>
+                      {dailySurveyResponses.relaxation ? 'Yes' : 'No'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                
+                {/* Relaxation type options - only show when relaxation is true */}
+                {dailySurveyResponses.relaxation && (
+                  <View style={styles.subQuestionContainer}>
+                    <Text style={styles.subQuestionText}>What type?</Text>
+                    
+                    {/* Meditation option */}
+                    <TouchableOpacity 
+                      style={[
+                        styles.subOptionButton, 
+                        dailySurveyResponses.relaxation_meditation && styles.subOptionButtonActive
+                      ]}
+                      onPress={() => setDailySurveyResponses(prev => ({...prev, relaxation_meditation: !prev.relaxation_meditation}))}
+                    >
+                      <Text style={[
+                        styles.subOptionText, 
+                        dailySurveyResponses.relaxation_meditation && styles.subOptionTextActive
+                      ]}>
+                        Meditation
+                      </Text>
+                    </TouchableOpacity>
+                    
+                    {/* Deep breathing option */}
+                    <TouchableOpacity 
+                      style={[
+                        styles.subOptionButton, 
+                        dailySurveyResponses.relaxation_breathing && styles.subOptionButtonActive
+                      ]}
+                      onPress={() => setDailySurveyResponses(prev => ({...prev, relaxation_breathing: !prev.relaxation_breathing}))}
+                    >
+                      <Text style={[
+                        styles.subOptionText, 
+                        dailySurveyResponses.relaxation_breathing && styles.subOptionTextActive
+                      ]}>
+                        Deep breathing
+                      </Text>
+                    </TouchableOpacity>
+                    
+                    {/* Journaling option */}
+                    <TouchableOpacity 
+                      style={[
+                        styles.subOptionButton, 
+                        dailySurveyResponses.relaxation_journaling && styles.subOptionButtonActive
+                      ]}
+                      onPress={() => setDailySurveyResponses(prev => ({...prev, relaxation_journaling: !prev.relaxation_journaling}))}
+                    >
+                      <Text style={[
+                        styles.subOptionText, 
+                        dailySurveyResponses.relaxation_journaling && styles.subOptionTextActive
+                      ]}>
+                        Journaling
+                      </Text>
+                    </TouchableOpacity>
+                    
+                    {/* Music option */}
+                    <TouchableOpacity 
+                      style={[
+                        styles.subOptionButton, 
+                        dailySurveyResponses.relaxation_music && styles.subOptionButtonActive
+                      ]}
+                      onPress={() => setDailySurveyResponses(prev => ({...prev, relaxation_music: !prev.relaxation_music}))}
+                    >
+                      <Text style={[
+                        styles.subOptionText, 
+                        dailySurveyResponses.relaxation_music && styles.subOptionTextActive
+                      ]}>
+                        Listening to music
+                      </Text>
+                    </TouchableOpacity>
+                    
+                    {/* Other option with text input */}
+                    <TouchableOpacity 
+                      style={[
+                        styles.subOptionButton, 
+                        dailySurveyResponses.relaxation_other && styles.subOptionButtonActive
+                      ]}
+                      onPress={() => setDailySurveyResponses(prev => ({...prev, relaxation_other: !prev.relaxation_other}))}
+                    >
+                      <Text style={[
+                        styles.subOptionText, 
+                        dailySurveyResponses.relaxation_other && styles.subOptionTextActive
+                      ]}>
+                        Other
+                      </Text>
+                    </TouchableOpacity>
+                    
+                    {/* Text input for "Other" */}
+                    {dailySurveyResponses.relaxation_other && (
+                      <TextInput
+                        style={styles.otherTextInput}
+                        placeholder="Please specify..."
+                        value={dailySurveyResponses.relaxation_other_text || ''}
+                        onChangeText={(text) => setDailySurveyResponses(prev => ({...prev, relaxation_other_text: text}))}
+                      />
+                    )}
+                    
+                    {/* How long? input field */}
+                    <View style={styles.formGroup}>
+                      <Text style={styles.subQuestionText}>How long? (minutes)</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Duration in minutes"
+                        keyboardType="number-pad"
+                        value={dailySurveyResponses.relaxation_duration}
+                        onChangeText={(text) => setDailySurveyResponses(prev => ({...prev, relaxation_duration: text}))}
+                      />
+                    </View>
+                  </View>
+                )}
+
+                {/* Late Meal */}
+                <View style={styles.yesNoQuestion}>
+                  <Text style={styles.questionText}>🍽️ Had a late meal (within 2h before sleep)?</Text>
+                  <TouchableOpacity 
+                    style={[
+                      styles.toggleButton, 
+                      dailySurveyResponses.late_meal && styles.toggleButtonActive
+                    ]}
+                    onPress={() => setDailySurveyResponses(prev => ({...prev, late_meal: !prev.late_meal}))}
+                  >
+                    <Text style={[
+                      styles.toggleButtonText, 
+                      dailySurveyResponses.late_meal && styles.toggleButtonTextActive
+                    ]}>
+                      {dailySurveyResponses.late_meal ? 'Yes' : 'No'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                                {/* Only show alcohol question if user drinks alcohol */}
+                                {personalInfo.alcohol_consumption !== 'never' && (
+                  <View style={styles.yesNoQuestion}>
+                    <Text style={styles.questionText}>🍷 Consumed alcohol?</Text>
+                    <TouchableOpacity 
+                      style={[
+                        styles.toggleButton, 
+                        dailySurveyResponses.alcohol && styles.toggleButtonActive
+                      ]}
+                      onPress={() => setDailySurveyResponses(prev => ({...prev, alcohol: !prev.alcohol}))}
+                    >
+                      <Text style={[
+                        styles.toggleButtonText, 
+                        dailySurveyResponses.alcohol && styles.toggleButtonTextActive
+                      ]}>
+                        {dailySurveyResponses.alcohol ? 'Yes' : 'No'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {/* Only show smoking question if user smokes */}
+                {personalInfo.smoker !== 'no' && (
+                  <View style={styles.yesNoQuestion}>
+                    <Text style={styles.questionText}>🚬 Smoked?</Text>
+                    <TouchableOpacity 
+                      style={[
+                        styles.toggleButton, 
+                        dailySurveyResponses.smoking && styles.toggleButtonActive
+                      ]}
+                      onPress={() => setDailySurveyResponses(prev => ({...prev, smoking: !prev.smoking}))}
+                    >
+                      <Text style={[
+                        styles.toggleButtonText, 
+                        dailySurveyResponses.smoking && styles.toggleButtonTextActive
+                      ]}>
+                        {dailySurveyResponses.smoking ? 'Yes' : 'No'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {/* Marijuana - only show if user consumes marijuana */}
+                {personalInfo.marijuana_consumption !== 'no' && (
+                <View style={styles.yesNoQuestion}>
+                  <Text style={styles.questionText}>🍃 Smoked marijuana?</Text>
+                  <TouchableOpacity 
+                    style={[
+                      styles.toggleButton, 
+                      dailySurveyResponses.marijuana && styles.toggleButtonActive
+                    ]}
+                    onPress={() => setDailySurveyResponses(prev => ({...prev, marijuana: !prev.marijuana}))}
+                  >
+                    <Text style={[
+                      styles.toggleButtonText, 
+                      dailySurveyResponses.marijuana && styles.toggleButtonTextActive
+                    ]}>
+                      {dailySurveyResponses.marijuana ? 'Yes' : 'No'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                )}
+
+                {/* Bright Lights */}
+                <View style={styles.yesNoQuestion}>
+                  <Text style={styles.questionText}>💡 Exposed to bright lights {'<'} 1h before bed?</Text>
+                  <TouchableOpacity 
+                    style={[
+                      styles.toggleButton, 
+                      dailySurveyResponses.bright_lights && styles.toggleButtonActive
+                    ]}
+                    onPress={() => setDailySurveyResponses(prev => ({...prev, bright_lights: !prev.bright_lights}))}
+                  >
+                    <Text style={[
+                      styles.toggleButtonText, 
+                      dailySurveyResponses.bright_lights && styles.toggleButtonTextActive
+                    ]}>
+                      {dailySurveyResponses.bright_lights ? 'Yes' : 'No'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                
+                {/* Phone in Bed */}
+                <View style={styles.yesNoQuestion}>
+                  <Text style={styles.questionText}>📱 Used phone in bed?</Text>
+                  <TouchableOpacity 
+                    style={[
+                      styles.toggleButton, 
+                      dailySurveyResponses.phone_in_bed && styles.toggleButtonActive
+                    ]}
+                    onPress={() => setDailySurveyResponses(prev => ({...prev, phone_in_bed: !prev.phone_in_bed}))}
+                  >
+                    <Text style={[
+                      styles.toggleButtonText, 
+                      dailySurveyResponses.phone_in_bed && styles.toggleButtonTextActive
+                    ]}>
+                      {dailySurveyResponses.phone_in_bed ? 'Yes' : 'No'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+              </ScrollView>
+              
+              <View style={styles.modalButtons}>
+                <TouchableOpacity 
+                  style={styles.autoFillButton} 
+                  onPress={() => {
+                    // Arrays to store found activities by type
+                    const exerciseActivities = [];
+                    const relaxationActivities = [];
+                    let exerciseDuration = 0;
+                    let relaxationDuration = 0;
+                    let hasMindfulMinutes = false;
+                    
+                    // Check if there are activities in the training section
+                    if (garminData?.activity?.daily_activities && 
+                        garminData.activity.daily_activities.length > 0) {
+                          
+                      // Categorize activities
+                      garminData.activity.daily_activities.forEach(activity => {
+                        const activityType = activity.type.toLowerCase();
+                        
+                        // Check if it's a relaxation activity (yoga or meditation)
+                        if (activityType.includes('yoga') || 
+                            activityType.includes('meditation') || 
+                            activityType.includes('mindful')) {
+                          relaxationActivities.push(activity.type);
+                          relaxationDuration += activity.duration_minutes;
+                        } 
+                        // Otherwise, it's a regular exercise
+                        else {
+                          exerciseActivities.push(activity.type);
+                          exerciseDuration += activity.duration_minutes;
+                        }
+                      });
+                    }
+                    
+                    // Check for mindful minutes
+                    if (garminData?.activity?.mindful_minutes && 
+                        garminData.activity.mindful_minutes > 0) {
+                      hasMindfulMinutes = true;
+                      
+                      // Only add mindful minutes to duration if no meditation activities found
+                      if (!relaxationActivities.some(a => 
+                          a.toLowerCase().includes('meditation') || 
+                          a.toLowerCase().includes('mindful'))) {
+                        relaxationDuration += garminData.activity.mindful_minutes;
+                      }
+                    }
+                    
+                    // Update exercise data if found
+                    if (exerciseActivities.length > 0) {
+                      setDailySurveyResponses(prev => ({
+                        ...prev,
+                        exercise: true,
+                        exercise_type: exerciseActivities.join(", "),
+                        exercise_duration: exerciseDuration.toString()
+                      }));
+                    }
+                    
+                    // Update relaxation data if found
+                    if (relaxationActivities.length > 0 || hasMindfulMinutes) {
+                      const hasYoga = relaxationActivities.some(a => a.toLowerCase().includes('yoga'));
+                      const hasMeditation = relaxationActivities.some(a => 
+                        a.toLowerCase().includes('meditation') || 
+                        a.toLowerCase().includes('mindful')) || hasMindfulMinutes;
+                      
+                      setDailySurveyResponses(prev => ({
+                        ...prev,
+                        relaxation: true,
+                        relaxation_duration: relaxationDuration.toString(),
+                        relaxation_meditation: hasMeditation,
+                        relaxation_other: hasYoga,
+                        relaxation_other_text: hasYoga ? 'Yoga' : prev.relaxation_other_text
+                      }));
+                    }
+                    
+                    // Show message if no data found
+                    if (exerciseActivities.length === 0 && 
+                        relaxationActivities.length === 0 && 
+                        !hasMindfulMinutes) {
+                      Alert.alert(
+                        "No Activity Data",
+                        "No exercise or relaxation activities were found in your data."
+                      );
+                    }
+                  }}
+                >
+                  <Text style={styles.autoFillButtonText}>Autofill Exercise Data</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity style={styles.modalSubmitButton} onPress={submitSurvey}>
+                  <Text style={styles.modalButtonText}>Submit</Text>
+                </TouchableOpacity>
+              </View>
+            
           </View>
         </View>
       </Modal>
