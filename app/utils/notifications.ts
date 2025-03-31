@@ -1,9 +1,43 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as BackgroundFetch from 'expo-background-fetch';
+import * as TaskManager from 'expo-task-manager';
 
-// Use named imports for the enum
-import { SchedulableTriggerInputTypes } from 'expo-notifications';
+// Define the background task name
+const SURVEY_REMINDER_TASK = 'SURVEY_REMINDER_TASK';
+
+// Register the background task handler
+TaskManager.defineTask(SURVEY_REMINDER_TASK, async () => {
+  try {
+    // Get the saved reminder time
+    const { hour, minute } = await getReminderTimePreference();
+    
+    // Calculate if we should trigger the notification today
+    const now = new Date();
+    const targetTime = new Date();
+    targetTime.setHours(hour, minute, 0, 0);
+    
+    // If it's past the target time for today, the notification will be scheduled for tomorrow
+    if (now.getHours() === hour && now.getMinutes() === minute) {
+      // It's time to trigger the notification!
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "Daily Health Survey",
+          body: "Don't forget to complete your daily PSS survey today!",
+          sound: true,
+          priority: Notifications.AndroidNotificationPriority.HIGH,
+        },
+        trigger: null, // Send immediately
+      });
+    }
+    
+    return BackgroundFetch.BackgroundFetchResult.NewData;
+  } catch (error) {
+    console.error('Error in background task:', error);
+    return BackgroundFetch.BackgroundFetchResult.Failed;
+  }
+});
 
 // Set notification handler (how notifications are displayed when the app is in the foreground)
 Notifications.setNotificationHandler({
@@ -35,56 +69,49 @@ export async function requestNotificationPermissions() {
 }
 
 // Schedule a daily survey reminder notification
-export async function scheduleDailySurveyReminder(hourPreference = 9, minutePreference = 0) {
+export async function scheduleDailySurveyReminder(hourPreference: number = 9, minutePreference: number = 0) {
   try {
-    // Check if we've already scheduled this notification
-    const notificationId = await AsyncStorage.getItem('surveyReminderNotificationId');
+    // Save the time preferences for future reference
+    await AsyncStorage.setItem('surveyReminderHour', hourPreference.toString());
+    await AsyncStorage.setItem('surveyReminderMinute', minutePreference.toString());
     
-    // If we have a previous notification ID, cancel it before creating a new one
-    if (notificationId) {
-      await Notifications.cancelScheduledNotificationAsync(notificationId);
-    }
+    // Register the background fetch task if it's not already registered
+    await BackgroundFetch.registerTaskAsync(SURVEY_REMINDER_TASK, {
+      minimumInterval: 15 * 60, // 15 minutes in seconds
+      stopOnTerminate: false,
+      startOnBoot: true,
+    });
     
-    // Get the reminder time preference
-    const reminderHour = hourPreference;
-    const reminderMinute = minutePreference;
-    
-    // Calculate seconds until target time (today or tomorrow)
+    // Also schedule the notification once so the user can see instant confirmation
     const now = new Date();
     const targetDate = new Date();
-    targetDate.setHours(reminderHour, reminderMinute, 0, 0);
+    targetDate.setHours(hourPreference, minutePreference, 0, 0);
     
     // If the target time is already past for today, schedule for tomorrow
     if (targetDate <= now) {
       targetDate.setDate(targetDate.getDate() + 1);
     }
     
-    // Calculate seconds from now until the target time
+    // Calculate seconds until the target time
     const secondsUntilTarget = Math.floor((targetDate.getTime() - now.getTime()) / 1000);
     
-    // Schedule the notification
-    const id = await Notifications.scheduleNotificationAsync({
-      content: {
-        title: "Daily Health Survey",
-        body: "Don't forget to complete your daily PSS survey today!",
-        sound: true,
-        priority: Notifications.AndroidNotificationPriority.HIGH,
-      },
-      trigger: {
-        seconds: secondsUntilTarget,
-        repeats: false,
-        type: SchedulableTriggerInputTypes.TIME_INTERVAL
-      },
-    });
+    // If the target time is within the next 24 hours, schedule it now
+    if (secondsUntilTarget <= 24 * 60 * 60) {
+      const id = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "Daily Health Survey",
+          body: "Don't forget to complete your daily PSS survey today!",
+          sound: true,
+          priority: Notifications.AndroidNotificationPriority.HIGH,
+        },
+        trigger: null, // Immediate notification to confirm setup
+      });
+      
+      console.log(`Scheduled daily survey reminder at ${hourPreference}:${minutePreference.toString().padStart(2, '0')} with ID: ${id}`);
+      return id;
+    }
     
-    // Save the ID and preferences for future reference
-    await AsyncStorage.setItem('surveyReminderNotificationId', id);
-    await AsyncStorage.setItem('surveyReminderHour', reminderHour.toString());
-    await AsyncStorage.setItem('surveyReminderMinute', reminderMinute.toString());
-    
-    console.log(`Scheduled daily survey reminder at ${reminderHour}:${reminderMinute.toString().padStart(2, '0')} with ID: ${id}`);
-    
-    return id;
+    return 'background-task-scheduled';
   } catch (error) {
     console.error('Failed to schedule survey reminder:', error);
     return null;
