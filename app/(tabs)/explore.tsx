@@ -5010,7 +5010,7 @@ const HomeScreen = () => {
                 {/* Seasonal Allergies - only show if user has seasonal allergies */}
                 {personalInfo.seasonal_allergies === 'yes' && (
                 <View style={styles.yesNoQuestion}>
-                  <Text style={styles.questionText}>🤧 Seasonal allergies?</Text>
+                  <Text style={styles.questionText}>🤧 Got seasonal allergies?</Text>
                   <TouchableOpacity 
                     style={[
                       styles.toggleButton, 
