@@ -621,8 +621,8 @@ const styles = StyleSheet.create({
   autoFillButton: {
     backgroundColor: '#4A90E2',
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 4,
+    paddingVertical: 12,
+    borderRadius: 5,
     marginRight: 10,
     flex: 1,
   },
@@ -3344,7 +3344,7 @@ const HomeScreen = () => {
         <View style={styles.modalContainer}>
           <View style={[styles.modalContent, { maxHeight: '90%' }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Personal Information</Text>
+              <Text style={styles.modalTitle}>Provide Personal Information</Text>
               <TouchableOpacity onPress={handleCloseModal}>
                 <Text style={styles.closeButton}>✕</Text>
                 </TouchableOpacity>
@@ -3555,7 +3555,7 @@ const HomeScreen = () => {
 
                             {/* Seasonal Allergies */}
                             <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Seasonal Allergies</Text>
+                <Text style={styles.formLabel}>Got Seasonal Allergies</Text>
                 <TouchableOpacity 
                   style={[
                     styles.dropdownButton,
@@ -4553,7 +4553,7 @@ const HomeScreen = () => {
                   onPress={handlePersonalInfoButtonPress}
                 >
                   <View style={styles.buttonWithCheckbox}>
-                    <Text style={styles.buttonText}>Personal Information</Text>
+                    <Text style={styles.buttonText}>Provide Personal Information</Text>
                     {personalInfoSubmitted && <Text style={styles.checkmark}>✓</Text>}
                   </View>
                 </TouchableOpacity>
@@ -4658,7 +4658,7 @@ const HomeScreen = () => {
                 <Text style={[
                   styles.buttonText,
                   !personalInfoSubmitted ? styles.buttonTextDisabled : {}
-                ]}>Daily Survey</Text>
+                ]}>Open Daily Survey</Text>
                 {surveySubmitted && <Text style={styles.checkmark}>✓</Text>}
               </View>
             </TouchableOpacity>
@@ -4912,7 +4912,7 @@ const HomeScreen = () => {
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Daily Survey</Text>
+              <Text style={styles.modalTitle}>Open Daily Survey</Text>
               <TouchableOpacity onPress={() => setPssModalVisible(false)}>
                 <Text style={styles.closeButton}>✕</Text>
               </TouchableOpacity>
