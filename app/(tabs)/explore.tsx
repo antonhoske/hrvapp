@@ -1870,8 +1870,11 @@ const HomeScreen = () => {
       const hasPermission = await requestNotificationPermissions();
       
       if (hasPermission) {
-        // Schedule daily reminder at 9 AM
-        await scheduleDailySurveyReminder();
+        // Get the saved time preference
+        const { hour, minute } = await getReminderTimePreference();
+        
+        // Schedule daily reminder with saved time
+        await scheduleDailySurveyReminder(hour, minute);
       }
     };
     
@@ -1903,9 +1906,9 @@ const HomeScreen = () => {
           // Only perform the refresh if needed
           const isNeedRefresh = await isSurveyReminderScheduled();
           if (!isNeedRefresh) {
-            refreshDailyReminder().catch(error => {
-              console.error('Error refreshing notification settings:', error);
-            });
+            // Get the saved time preference before refreshing
+            const { hour, minute } = await getReminderTimePreference();
+            await refreshDailyReminder();
           }
         }
       }
@@ -1915,9 +1918,9 @@ const HomeScreen = () => {
     const checkInitialNotification = async () => {
       const isNeedRefresh = await isSurveyReminderScheduled();
       if (!isNeedRefresh) {
-        refreshDailyReminder().catch(error => {
-          console.error('Error refreshing notification settings:', error);
-        });
+        // Get the saved time preference before refreshing
+        const { hour, minute } = await getReminderTimePreference();
+        await refreshDailyReminder();
       }
     };
     
@@ -1929,11 +1932,49 @@ const HomeScreen = () => {
   }, [initializeApp, checkSurveyDate]);
 
   useEffect(() => {
+    const loadPersistedStates = async () => {
+      try {
+        const [personalInfoSubmittedValue, historyDataUploadedValue] = await Promise.all([
+          AsyncStorage.getItem('personalInfoSubmitted'),
+          AsyncStorage.getItem('historyDataUploaded')
+        ]);
+        
+        setPersonalInfoSubmitted(personalInfoSubmittedValue === 'true');
+        setHistoryDataUploaded(historyDataUploadedValue === 'true');
+      } catch (error) {
+        console.error('Error loading persisted states:', error);
+      }
+    };
+
+    loadPersistedStates();
+  }, []);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (nextAppState === 'active') {
+        // Only perform the refresh if needed
+        isSurveyReminderScheduled()
+          .then(isScheduled => {
+            if (!isScheduled) {
+              refreshDailyReminder().catch(error => {
+                console.error('Error refreshing notification settings:', error);
+              });
+            }
+          })
+          .catch(error => console.error('Error checking notification status:', error));
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  useEffect(() => {
     if (dataSource && !isInitialized) {
-      
       initializeApp();
     }
-  }, [dataSource]);
+  }, [dataSource, isInitialized]);
 
   // In the initializeApp function, ensure we properly fetch data based on the current data source
   const initializeApp = async () => {
@@ -2426,6 +2467,7 @@ const HomeScreen = () => {
       }
       
       setPersonalInfoSubmitted(true); // Mark as submitted
+      await AsyncStorage.setItem('personalInfoSubmitted', 'true'); // Persist the state
       
       // Return success - modal visibility handled by caller
       return true;
@@ -4629,6 +4671,7 @@ const HomeScreen = () => {
                     // Only set the uploaded flag if the upload was successful
                     if (uploadSuccess) {
                       setHistoryDataUploaded(true);
+                      await AsyncStorage.setItem('historyDataUploaded', 'true'); // Persist the state
                     }
                   }}
                 >
