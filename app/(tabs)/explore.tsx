@@ -729,6 +729,19 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     color: '#333',
   },
+  scaleLabelsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 5,
+  },
+  scaleLabelLeft: {
+    fontSize: 12,
+    color: '#666',
+  },
+  scaleLabelRight: {
+    fontSize: 12,
+    color: '#666',
+  },
 });
 
 // Add this new function to handle device ID generation and storage
@@ -859,7 +872,9 @@ const HomeScreen = () => {
       case 0: // Stress scale 0-10
         return Array.from({ length: 11 }, (_, i) => ({ 
           value: i, 
-          label: i.toString() 
+          label: i === 0 ? "0" : 
+                 i === 10 ? "10" : 
+                 i.toString() 
         }));
       case 1: // Sleep quality
         return [
@@ -4912,7 +4927,7 @@ const HomeScreen = () => {
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Open Daily Survey</Text>
+              <Text style={styles.modalTitle}>Daily Survey</Text>
               <TouchableOpacity onPress={() => setPssModalVisible(false)}>
                 <Text style={styles.closeButton}>✕</Text>
               </TouchableOpacity>
@@ -4924,6 +4939,12 @@ const HomeScreen = () => {
               renderItem={({ item, index }) => (
                 <View style={styles.questionContainer}>
                   <Text style={styles.questionText}>{item}</Text>
+                  {index === 0 && (
+                    <View style={styles.scaleLabelsContainer}>
+                      <Text style={styles.scaleLabelLeft}>not at all</Text>
+                      <Text style={styles.scaleLabelRight}>extremely stressed</Text>
+                    </View>
+                  )}
                   <View style={styles.likertContainer}>
                     {getOptionsForQuestion(index).map((option) => (
                       <TouchableOpacity
